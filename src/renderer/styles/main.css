@@ -1,0 +1,631 @@
+:root {
+  --bg: #0f1115;
+  --surface: #171a21;
+  --surface-alt: #1f232c;
+  --border: #2a2f3a;
+  --text: #e6e8ec;
+  --text-muted: #9aa1ad;
+  --accent: #5b8def;
+  --danger: #e5484d;
+  --radius: 8px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.centered-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.35rem;
+  margin-bottom: 1.1rem;
+}
+
+.card > h2:first-child {
+  margin-top: 0;
+}
+
+/* A card heading paired with a primary action button, e.g. "Orders" +
+   "+ New order" -- keeps the action right next to the title it belongs
+   to instead of buried further down the card. */
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.section-header h2 {
+  margin-bottom: 0;
+}
+
+.centered-screen .card {
+  width: 100%;
+  max-width: 380px;
+}
+
+/* Tightened, consistent heading scale -- h1 for the page title, h2 for a
+   card's own heading, h3 for a labelled group within a card. Everything
+   below used to share near-identical sizes, which is a lot of why the
+   page read as one undifferentiated wall of boxes. */
+h1 {
+  font-size: 1.4rem;
+  margin: 0 0 1rem;
+}
+
+h2 {
+  font-size: 1.05rem;
+  margin: 0 0 0.75rem;
+}
+
+h3 {
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+label {
+  display: block;
+  margin-bottom: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+input,
+textarea,
+select {
+  display: block;
+  width: 100%;
+  margin-top: 0.2rem;
+  padding: 0.4rem 0.55rem;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+}
+
+textarea {
+  resize: vertical;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.checkbox-label input {
+  width: auto;
+  margin: 0;
+}
+
+button {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 0.45rem 0.9rem;
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: transform 0.08s ease, filter 0.08s ease;
+}
+
+button:hover {
+  filter: brightness(1.1);
+}
+
+/* Brief press-down feedback on click, so it's obvious something
+   happened even before the resulting UI change (a table refresh, a
+   modal closing, etc.) shows up. */
+button:active:not(:disabled) {
+  transform: scale(0.96);
+  filter: brightness(0.95);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.danger {
+  background: var(--danger);
+}
+
+/* Lower-emphasis actions (Cancel, Edit, Export, Add line...) -- an
+   outline style so they don't compete with the one or two actions per
+   screen that actually matter (Save/Add). Previously every button was
+   solid accent-blue regardless of importance, which is a big part of why
+   the UI felt noisy. */
+button.btn-secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+button.btn-secondary:hover {
+  background: var(--surface-alt);
+  filter: none;
+}
+
+/* Compact variant for buttons packed into a table row. */
+button.btn-sm {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+button.link-button {
+  background: none;
+  color: var(--accent);
+  padding: 0;
+  text-decoration: underline;
+}
+
+.error {
+  color: var(--danger);
+}
+
+.hint {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1rem 0;
+}
+
+.inline-form {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+  align-items: center;
+}
+
+.inline-form input,
+.inline-form select {
+  width: auto;
+  margin: 0;
+  flex: 1 1 160px;
+}
+
+.inline-form button {
+  flex: 0 0 auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.data-table th {
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 190px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+}
+
+.brand {
+  font-weight: 600;
+  margin-bottom: 1.25rem;
+}
+
+.nav-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  flex: 1;
+}
+
+.nav-list li {
+  margin-bottom: 0.2rem;
+}
+
+.nav-link {
+  width: 100%;
+  text-align: left;
+  background: none;
+  color: var(--text);
+  padding: 0.45rem 0.7rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.nav-link:hover:not(:disabled) {
+  background: var(--surface-alt);
+}
+
+.nav-link.active {
+  background: var(--accent);
+  color: white;
+}
+
+.lock-button {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+}
+
+/* Capping the reading width is the single biggest fix for the "wide dead
+   space" feeling on a maximized window -- rows and paragraphs no longer
+   stretch edge-to-edge with huge empty gaps between short bits of text. */
+.content {
+  flex: 1;
+  padding: 1.75rem 2rem;
+  overflow-y: auto;
+  max-height: 100vh;
+}
+
+.content > * {
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.form-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.row-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+/* Order description: big and legible, since custom orders can be long and
+   this may stay open for reference while the work is in progress. Kept
+   deliberately large even though the rest of this pass tightens things
+   up elsewhere. */
+.description-label {
+  margin-top: 0.75rem;
+}
+
+.description-field {
+  min-height: 130px;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+/* Truncated description shown in table rows -- the full text is always
+   available by opening the order for editing (or via PDF export). */
+.description-preview {
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-muted);
+}
+
+/* Collapsible sub-panels (Price calculator / Feedback) inside the order
+   form. These sit closed most of the time, so a light border rather than
+   a filled background keeps them from reading as "yet another box"
+   stacked on the page when they are open. */
+.calculator,
+.feedback {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  margin: 0.75rem 0;
+}
+
+.calculator summary,
+.feedback summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.calculator[open] summary,
+.feedback[open] summary {
+  margin-bottom: 0.6rem;
+}
+
+.calculator .data-table {
+  margin-top: 0.5rem;
+}
+
+.calc-total-line {
+  margin: 0.6rem 0;
+}
+
+.feedback label {
+  margin-top: 0.6rem;
+}
+
+/* Client totals: a plain divider rather than a nested card, since it's
+   always visible (not collapsed like the two panels above) and sits
+   directly under the "Orders" heading it belongs to. */
+.totals-card {
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.totals-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.totals-toggle {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.totals-tab {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.3rem 0.7rem;
+  font-size: 0.8rem;
+}
+
+.totals-tab.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.totals-all-time {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0.3rem 0;
+}
+
+.toolbar {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  margin-bottom: 0.75rem;
+}
+
+.toolbar label {
+  margin-bottom: 0;
+}
+
+.toolbar select {
+  width: auto;
+  min-width: 160px;
+}
+
+/* Quick-status <select> embedded directly in a table cell -- smaller and
+   tighter than a full-width form control. */
+.quick-status {
+  width: auto;
+  min-width: 125px;
+  margin-top: 0;
+  padding: 0.25rem 0.35rem;
+  font-size: 0.8rem;
+}
+
+/* Order # shown above the form, e.g. "Editing Order #42". */
+.order-heading {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+.attachments {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  margin: 0.75rem 0;
+}
+
+.attachment-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.attachment-item {
+  width: 110px;
+  text-align: center;
+}
+
+.attachment-thumb {
+  width: 110px;
+  height: 110px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  display: block;
+}
+
+/* Non-image attachments get a plain icon tile instead of a preview. */
+.attachment-file {
+  width: 110px;
+  height: 110px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-alt);
+  font-size: 2rem;
+}
+
+.attachment-name {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  word-break: break-word;
+  line-height: 1.2;
+  margin-top: 0.3rem;
+}
+
+.attachment-meta {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.attachment-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.25rem;
+  margin-top: 0.3rem;
+}
+
+/* Full-screen image preview, opened by clicking a thumbnail. */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 2rem;
+}
+
+.lightbox img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 6px;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+}
+
+/* Small dialog overlay for the calendar event form -- same fixed
+   full-screen backdrop idea as .lightbox, but centers a card with a form
+   in it rather than a full-bleed image. */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 2rem;
+}
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.5rem;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal h2 {
+  margin-top: 0;
+}
+
+/* Buckets in the "due date digest" modal (dueDateSummary.js). */
+.due-summary-bucket {
+  margin-bottom: 1rem;
+}
+
+.due-summary-bucket h3 {
+  margin-bottom: 0.4rem;
+}
+
+.due-summary-danger h3 {
+  color: var(--danger);
+}
+
+.due-summary-amber h3 {
+  color: #f59e0b;
+}
+
+.due-summary-muted h3 {
+  color: var(--text-muted);
+}
+
+.due-summary-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.due-summary-list li {
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.due-summary-list li:last-child {
+  border-bottom: none;
+}
+
+/* FullCalendar (see calendar.js) ships its own CSS at runtime and reads
+   these standard custom properties for theming -- overridden here so it
+   blends with the app's dark palette instead of its light default. */
+/* FullCalendar v7's "classic" theme (see index.html) reads its colors
+   from these --fc-classic-* custom properties -- a different naming
+   scheme than older FullCalendar versions used. It already ships a
+   built-in dark palette, activated by the data-color-scheme="dark"
+   attribute set on this element in calendar.js; these overrides just
+   swap its default blue accent for this app's own accent color. */
+#calendar-mount {
+  --fc-classic-primary: var(--accent);
+  --fc-classic-button-strong: var(--accent);
+  --fc-classic-button-strong-border: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+}

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!--
+    Strict CSP: only same-origin (local file) scripts/styles may run, and
+    inline <script> tags are blocked entirely. img-src additionally allows
+    blob: for attachment thumbnails/lightbox, which are rendered from
+    in-memory Blob objects (see views/personDetail.js) rather than fetched
+    from anywhere -- still fully local, never a network request.
+  -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:;" />
+  <title>SWA</title>
+  <!--
+    FullCalendar v7 ships its CSS as explicit files rather than injecting
+    them via JS -- skeleton.css (structural) + the "classic" theme's own
+    theme.css (structural) + palette.css (actual colors, including a
+    built-in dark palette calendar.js opts into). See
+    scripts/copy-vendor-assets.js for where these come from.
+  -->
+  <link rel="stylesheet" href="vendor/fullcalendar/skeleton.css" />
+  <link rel="stylesheet" href="vendor/fullcalendar/theme-classic.css" />
+  <link rel="stylesheet" href="vendor/fullcalendar/theme-classic-palette.css" />
+  <link rel="stylesheet" href="styles/main.css" />
+</head>
+<body>
+  <div id="app"></div>
+  <!--
+    FullCalendar's "global" build -- a self-contained UMD bundle meant for
+    plain <script> tag use, no bundler needed (see calendar.js). Vendored
+    locally by scripts/copy-vendor-assets.js (an npm postinstall step)
+    rather than loaded from a CDN, keeping this fully offline. It's a
+    classic (non-module) script, so it runs synchronously here, before
+    app.js -- guaranteeing window.FullCalendar exists by the time any
+    module code needs it, since type="module" scripts always defer until
+    the document is parsed.
+  -->
+  <script src="vendor/fullcalendar/global.js"></script>
+  <!--
+    The "classic" theme plugin -- must load after global.js, since it
+    registers itself onto FullCalendar's shared plugin list (which
+    Calendar instances pick up automatically, no explicit `plugins:`
+    config needed -- see calendar.js).
+  -->
+  <script src="vendor/fullcalendar/theme-classic.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

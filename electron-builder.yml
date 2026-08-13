@@ -1,0 +1,25 @@
+# Packaging config for electron-builder. Targets for all three desktop
+# platforms are defined here (per the project's cross-platform goal), but
+# only the Windows target has actually been built/tested so far -- see
+# README.md.
+appId: com.wasinizate.swa
+productName: SWA
+directories:
+  output: dist
+files:
+  - src/**/*
+  - package.json
+  - node_modules/**/*
+# better-sqlite3-multiple-ciphers ships a native .node binary. Native
+# modules can't be loaded from inside an asar archive, so this unpacks
+# just that file into app.asar.unpacked/ at build time.
+asarUnpack:
+  - "**/*.node"
+win:
+  target: nsis
+mac:
+  target: dmg
+  category: public.app-category.business
+linux:
+  target: AppImage
+  category: Office

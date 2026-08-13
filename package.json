@@ -1,0 +1,23 @@
+{
+  "name": "swa",
+  "productName": "SWA",
+  "version": "0.1.0",
+  "description": "SWA (Sex Worker Assistant) -- a local-first, encrypted desktop CRM for independent workers managing clients across multiple online platforms.",
+  "main": "src/main/index.js",
+  "private": true,
+  "license": "MIT",
+  "author": "wasinizate",
+  "scripts": {
+    "start": "electron .",
+    "package": "electron-builder",
+    "postinstall": "node scripts/copy-vendor-assets.js"
+  },
+  "dependencies": {
+    "better-sqlite3-multiple-ciphers": "^13.0.3",
+    "fullcalendar": "^7.0.2"
+  },
+  "devDependencies": {
+    "electron": "^42.0.0",
+    "electron-builder": "^26.0.0"
+  }
+}
