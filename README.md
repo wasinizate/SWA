@@ -196,4 +196,4 @@ data — `.gitignore` already excludes database and vault files, but double
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+GNU General Public License v3.0 — see [LICENSE](LICENSE).
