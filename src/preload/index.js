@@ -78,4 +78,11 @@ contextBridge.exposeInMainWorld('api', {
     setOrderDueReminderConfig: (enabled, daysBefore, showSummaryOnOpen) =>
       ipcRenderer.invoke('settings:setOrderDueReminderConfig', { enabled, daysBefore, showSummaryOnOpen }),
   },
+  update: {
+    // Manual, opt-in only -- see updates/checkForUpdates.js. Nothing
+    // calls these except a direct click on Settings' "Check for
+    // updates" button.
+    check: () => ipcRenderer.invoke('update:check'),
+    openReleasePage: (url) => ipcRenderer.invoke('update:openReleasePage', url),
+  },
 });

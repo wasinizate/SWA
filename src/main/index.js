@@ -5,8 +5,10 @@
 //
 // This app deliberately never calls electron's autoUpdater or
 // crashReporter modules, and has no analytics/telemetry dependency
-// anywhere in package.json -- see README.md's threat model for the full
-// "what this does and doesn't protect against" writeup.
+// anywhere in package.json. The one exception to "no network calls" is
+// updates/checkForUpdates.js -- a manual, opt-in, Settings-triggered
+// version check against GitHub's public API, never automatic. See
+// README.md's threat model for the full writeup.
 
 const { app, BrowserWindow } = require('electron');
 const { createMainWindow } = require('./window');
@@ -17,6 +19,7 @@ const { registerOrderIpc } = require('./ipc/orderIpc');
 const { registerOrderAttachmentIpc } = require('./ipc/orderAttachmentIpc');
 const { registerCalendarEventIpc } = require('./ipc/calendarEventIpc');
 const { registerSettingsIpc } = require('./ipc/settingsIpc');
+const { registerUpdateIpc } = require('./ipc/updateIpc');
 const idleLock = require('./security/idleLock');
 const reminderScheduler = require('./reminders/reminderScheduler');
 const connection = require('./db/connection');
@@ -27,7 +30,7 @@ const settingsRepo = require('./db/repositories/settings');
 // the OS quietly declines to actually display anything. Matches
 // electron-builder.yml's appId so a packaged build and this dev run
 // behave the same way. Harmless no-op on macOS/Linux.
-app.setAppUserModelId('com.example.localcrm');
+app.setAppUserModelId('com.wasinizate.swa');
 
 let mainWindow = null;
 
@@ -61,6 +64,7 @@ app.whenReady().then(() => {
   registerOrderAttachmentIpc();
   registerCalendarEventIpc();
   registerSettingsIpc();
+  registerUpdateIpc();
 
   mainWindow = createMainWindow();
 

@@ -37,6 +37,18 @@ export function renderSettingsView(container) {
     </section>
 
     <section class="card">
+      <h2>Updates</h2>
+      <p class="hint">
+        Manual only -- this app never checks for updates on its own.
+        Clicking below sends a single request to GitHub to compare
+        version numbers; nothing else is sent, and nothing happens
+        automatically or in the background.
+      </p>
+      <button id="check-updates" type="button" class="btn-secondary">Check for updates</button>
+      <p class="hint" id="update-result"></p>
+    </section>
+
+    <section class="card">
       <h2>Quick unlock</h2>
       <p class="hint">
         When enabled, your passphrase is wrapped using this operating
@@ -96,6 +108,32 @@ export function renderSettingsView(container) {
     const showSummaryOnOpen = container.querySelector('#show-due-summary').checked;
     await window.api.settings.setOrderDueReminderConfig(enabled, daysBefore, showSummaryOnOpen);
     flash(container.querySelector('#order-reminder-saved'));
+  });
+
+  container.querySelector('#check-updates').addEventListener('click', async () => {
+    const btn = container.querySelector('#check-updates');
+    const resultEl = container.querySelector('#update-result');
+    btn.disabled = true;
+    resultEl.className = 'hint';
+    resultEl.textContent = 'Checking...';
+
+    const result = await window.api.update.check();
+
+    if (result.error) {
+      resultEl.className = 'error';
+      resultEl.textContent = `Couldn't check for updates: ${result.error}`;
+    } else if (result.isNewer) {
+      resultEl.className = 'hint';
+      resultEl.innerHTML = `A newer version (v${result.latestVersion}) is available. <button type="button" class="link-button" id="open-release">View release</button>`;
+      resultEl.querySelector('#open-release').addEventListener('click', () => {
+        window.api.update.openReleasePage(result.releaseUrl);
+      });
+    } else {
+      resultEl.className = 'hint';
+      resultEl.textContent = `You're up to date (v${result.currentVersion}).`;
+    }
+
+    btn.disabled = false;
   });
 
   const toggle = container.querySelector('#quick-unlock-toggle');

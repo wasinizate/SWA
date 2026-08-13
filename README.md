@@ -20,24 +20,38 @@ screening notes, payment history — in spreadsheets or notes apps with no
 real protection. This app keeps that data **entirely on your own machine**,
 encrypted at rest, with no account, no cloud sync, and no telemetry.
 
-## Requirements
+## Installing (just want to use the app)
 
-- [Node.js](https://nodejs.org/) 18 or later, and npm
-- Windows, macOS, or Linux (only Windows has been built/tested so far —
-  see [Cross-platform status](#cross-platform-status))
+Download the installer for your OS from the
+[Releases](../../releases) page and run it — **that's it, nothing else
+to install.** The installer bundles its own copy of Electron (which
+includes Node.js and Chromium internally) and every dependency the app
+needs, including the native database-encryption module built for your
+exact OS/architecture. You do **not** need Node.js, npm, or anything
+else on your machine first; the app never reaches out to anything on
+your system beyond your own filesystem.
 
-## Getting started
+(Windows-only so far — see [Cross-platform status](#cross-platform-status).
+Since it isn't code-signed, Windows SmartScreen will warn on first run;
+that's expected for an early release without a paid signing certificate,
+not a sign anything is wrong.)
+
+The first launch will ask you to set a passphrase — this encrypts the
+database file. **There is no password reset.** Write your passphrase down
+somewhere safe outside the app.
+
+## Building from source (for development/contributing)
+
+This is only needed if you want to modify the code, not to run the app.
+
+**Requirements:** [Node.js](https://nodejs.org/) 18 or later, and npm.
 
 ```bash
 npm install
 npm start
 ```
 
-The first launch will ask you to set a passphrase — this encrypts the
-database file. **There is no password reset.** Write your passphrase down
-somewhere safe outside the app.
-
-## Building a distributable
+To produce your own installer (same thing the Releases page ships):
 
 ```bash
 npm run package
@@ -105,9 +119,15 @@ stored as integer cents to avoid floating-point rounding errors).
 - The app auto-locks after a configurable period of inactivity (default
   10 minutes), closing the database connection and requiring the
   passphrase again.
-- No network requests are made by this app's own code: no account
-  creation, no sync, no analytics, no crash reporting. `npm install`
-  pulls a small, deliberately short dependency list — check
+- No automatic or background network requests are made by this app's own
+  code: no account creation, no sync, no analytics, no crash reporting.
+  The **one exception** is a manual "Check for updates" button in
+  Settings — nothing happens unless you click it, and all it does is ask
+  GitHub's public API for this project's latest release tag to compare
+  against your current version (see
+  [`src/main/updates/checkForUpdates.js`](src/main/updates/checkForUpdates.js)).
+  No usage data, telemetry, or identifying information is sent. `npm
+  install` pulls a small, deliberately short dependency list — check
   `package.json` yourself. Runtime dependencies:
   [`better-sqlite3-multiple-ciphers`](https://github.com/m4heshd/better-sqlite3-multiple-ciphers)
   (database encryption) and [FullCalendar](https://fullcalendar.io/)
@@ -143,6 +163,11 @@ stored as integer cents to avoid floating-point rounding errors).
 - Forensic recovery of data from RAM, swap/pagefile, or a "cold boot"
   style attack — the decrypted database and cached in-memory query
   results are ordinary process memory, not specially hardened.
+- Using **Check for updates**: this reveals to GitHub (and anyone
+  positioned to observe your network traffic) that this app, and
+  therefore this project's software, is running on your network at that
+  moment — no client data is sent, but that request itself is metadata.
+  It only ever fires when you click the button.
 - A compromised or malicious npm dependency. This project has a small,
   auditable dependency tree by design, but it hasn't been through an
   independent security audit.
