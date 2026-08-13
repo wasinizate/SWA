@@ -2,7 +2,7 @@
 
 A local-first, encrypted desktop CRM for independent workers who manage
 clients across multiple online platforms (creator platforms, marketplaces,
-freelancing sites, or anything else) — built with Electron and an
+freelancing sites, or anything else), built with Electron (Like Discord) and an
 encrypted SQLite database.
 
 **Status: active development.** Electron shell, encrypted DB layer, full
@@ -15,12 +15,11 @@ disabled "Coming in a later phase" nav item).
 ## Why this exists
 
 Freelancers and independent creators who deal with many clients across
-many platforms end up tracking sensitive information — real names,
-screening notes, payment history — in spreadsheets or notes apps with no
-real protection. This app keeps that data **entirely on your own machine**,
-encrypted at rest, with no account, no cloud sync, and no telemetry.
+many platforms - it's overwhelming. Many use a spreadsheets or notes apps with no
+real protection, or ways to track consistent identities of users, order statuses, or their current work.. This app keeps that data **entirely on your own machine**,
+encrypted at rest, with no account, no cloud sync, and no telemetry. It gives you a single place you can go to track all your work, who bought what, who paid for this or that, when they paid, what platform they used for contact, and when you promised delivery.
 
-## Installing (just want to use the app)
+## Installing (I just want to use the app)
 
 Download the installer for your OS from the
 [Releases](../../releases) page and run it — **that's it, nothing else
@@ -31,7 +30,7 @@ exact OS/architecture. You do **not** need Node.js, npm, or anything
 else on your machine first; the app never reaches out to anything on
 your system beyond your own filesystem.
 
-(Windows-only so far — see [Cross-platform status](#cross-platform-status).
+(Windows-only so far, see [Cross-platform status](#cross-platform-status).
 Since it isn't code-signed, Windows SmartScreen will warn on first run;
 that's expected for an early release without a paid signing certificate,
 not a sign anything is wrong.)
