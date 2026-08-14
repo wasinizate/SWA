@@ -5,21 +5,21 @@ clients across multiple online platforms (creator platforms, marketplaces,
 freelancing sites, or anything else), built with Electron (Like Discord) and an
 encrypted SQLite database.
 
-**Status: active development.** Electron shell, encrypted DB layer, full
-CRUD for People/Platform Accounts/Orders (with attachments, a price
-calculator, purchase totals, and PDF export), a FullCalendar-based
-Calendar (with desktop reminders and .ics export), search (an
-always-visible sidebar quick-search plus a dedicated results page), a
-theme picker, and an Expenses tab (expense ledger, slated income, and
-manually-entered platform pay-statement totals) are all implemented.
-Budget *targets* (per-category spending limits) are not built yet.
+**Status: active development.** I'm developing it in my free time, and will accept feedback or suggestions. I am not planning to make this a full time job though. 
 
 ## Why this exists
+Freelancers and independent content creators juggle clients across multiple platforms. Keeping track of it all is overwhelming. Most people rely on spreadsheets or notes apps that offer little protection, no reliable way to track consistent user identities, order statuses, or current workloads.
 
-Freelancers and independent creators who deal with many clients across
-many platforms - it's overwhelming. Many use a spreadsheets or notes apps with no
-real protection, or ways to track consistent identities of users, order statuses, or their current work.. This app keeps that data **entirely on your own machine**,
-encrypted at rest, with no account, no cloud sync, and no telemetry. It gives you a single place you can go to track all your work, who bought what, who paid for this or that, when they paid, what platform they used for contact, and when you promised delivery.
+This app solves that by keeping all your data entirely on your own machine—encrypted at rest, with no account required, no cloud sync, and no telemetry.
+
+It gives you one private place to manage:
+Clients and their contact platforms
+Orders (who bought what)
+Payments (who paid, when, and for what)
+Delivery promises and deadlines
+Overall workloads outside of scheduled posts
+
+Very few tools address these specific needs. Existing options are usually built for agencies or repurposed from something else. This one is designed from the ground up to keep your work organized, private, and manageable.
 
 ## Installing (I just want to use the app)
 
