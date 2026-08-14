@@ -1,9 +1,27 @@
 // Settings: auto-lock timeout, order due-date desktop reminders, the
-// opt-in quick-unlock toggle, and changing the vault passphrase.
+// opt-in quick-unlock toggle, appearance (theme), and changing the vault
+// passphrase.
+
+import { escapeHtml } from '../helpers.js';
+import { THEMES, applyTheme, getCurrentTheme } from '../theme.js';
 
 export function renderSettingsView(container) {
   container.innerHTML = `
     <h1>Settings</h1>
+
+    <section class="card">
+      <h2>Appearance</h2>
+      <p class="hint">Changes apply immediately.</p>
+      <div class="theme-swatches" id="theme-swatches">
+        ${THEMES.map(
+          (t) => `
+          <button type="button" class="theme-swatch" data-theme-id="${t.id}" title="${escapeHtml(t.label)}">
+            <span class="theme-swatch-preview" style="background: linear-gradient(135deg, ${t.swatch[0]} 50%, ${t.swatch[1]} 50%);"></span>
+            <span class="theme-swatch-label">${escapeHtml(t.label)}</span>
+          </button>`
+        ).join('')}
+      </div>
+    </section>
 
     <section class="card">
       <h2>Auto-lock</h2>
@@ -94,7 +112,26 @@ export function renderSettingsView(container) {
     container.querySelector('#order-reminder-enabled').checked = orderReminderConfig?.enabled ?? true;
     container.querySelector('#order-reminder-days-before').value = orderReminderConfig?.daysBefore ?? 1;
     container.querySelector('#show-due-summary').checked = orderReminderConfig?.showSummaryOnOpen ?? true;
+
+    // Already applied to the page by shell.js at boot -- this just marks
+    // which swatch matches what's currently live, no extra IPC call.
+    markActiveSwatch(getCurrentTheme());
   }
+
+  function markActiveSwatch(themeId) {
+    container.querySelectorAll('.theme-swatch').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.themeId === themeId);
+    });
+  }
+
+  container.querySelectorAll('.theme-swatch').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const themeId = btn.dataset.themeId;
+      applyTheme(themeId); // instant preview
+      markActiveSwatch(themeId);
+      await window.api.settings.setTheme(themeId);
+    });
+  });
 
   container.querySelector('#save-timeout').addEventListener('click', async () => {
     const minutes = Number(container.querySelector('#timeout-minutes').value) || 10;

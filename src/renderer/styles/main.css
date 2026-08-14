@@ -1,3 +1,8 @@
+/* Default theme (unchanged from before theming existed) -- also the
+   fallback for an unset/unrecognized data-theme, so the app is never
+   left half-styled. Every other theme below overrides only these same
+   custom properties; no other rule in this file references a color
+   directly (see src/renderer/theme.js for how data-theme gets set). */
 :root {
   --bg: #0f1115;
   --surface: #171a21;
@@ -7,7 +12,64 @@
   --text-muted: #9aa1ad;
   --accent: #5b8def;
   --danger: #e5484d;
+  --warning: #f59e0b;
   --radius: 8px;
+}
+
+/* OnlyFans: built from their actual published brand colors, not an
+   approximation -- #00AFF0 (primary blue), #27272B (charcoal), #8A96A3
+   (gray accent) are all colors from their own brand palette (see
+   https://www.loftlyy.com/en/onlyfans and https://www.onlinepalette.com/onlyfans/).
+   --bg/--surface-alt are darker/lighter steps off their charcoal to fit
+   this app's 3-tier background system; --text-muted is their gray
+   accent used exactly as published. */
+:root[data-theme="onlyfans"] {
+  --bg: #18181a;
+  --surface: #27272b;
+  --surface-alt: #323238;
+  --border: #3f3f46;
+  --text: #f5f6f7;
+  --text-muted: #8a96a3;
+  --accent: #00aff0;
+  --danger: #ff5a5f;
+  --warning: #ffb020;
+}
+
+/* Fansly: --accent is their actual logo color (#2799f6), pulled directly
+   from Fansly_logo.svg on Wikimedia Commons
+   (https://commons.wikimedia.org/wiki/File:Fansly_logo.svg) -- not a
+   guess. Fansly's own palette is just that blue plus white, with no
+   published dark UI palette, so --bg/--surface/etc. are a blue-tinted
+   dark scale built to pair with it (distinct from the neutral-gray scale
+   the OnlyFans theme uses, so the two don't read as the same theme with
+   a different accent swapped in). */
+:root[data-theme="fansly"] {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface-alt: #1f2732;
+  --border: #2d3542;
+  --text: #eef3f8;
+  --text-muted: #9aa7b4;
+  --accent: #2799f6;
+  --danger: #f2557a;
+  --warning: #ffb020;
+}
+
+/* Sakura: the one light theme -- soft pink/cream, dark plum text for
+   contrast, sakura-pink accent. Pairs with the decorative petals
+   (src/renderer/theme.js starts/stops them) and with the Calendar view
+   letting FullCalendar fall back to its light default -- see
+   calendar.js's isLightTheme() check. */
+:root[data-theme="sakura"] {
+  --bg: #fff6f8;
+  --surface: #ffffff;
+  --surface-alt: #ffe6ee;
+  --border: #f6c9da;
+  --text: #3a2530;
+  --text-muted: #8a6b78;
+  --accent: #e85d8a;
+  --danger: #d1495b;
+  --warning: #d98324;
 }
 
 * {
@@ -261,6 +323,73 @@ hr {
   margin-bottom: 1.25rem;
 }
 
+/* Always-visible sidebar quick-search (shell.js) -- anchors an
+   absolutely-positioned dropdown of live results. The sidebar itself has
+   no overflow:hidden, so the dropdown is free to be wider than the
+   190px sidebar and spill into the content area. */
+.sidebar-search {
+  position: relative;
+  margin-bottom: 1rem;
+}
+
+.sidebar-search input[type="search"] {
+  margin-top: 0;
+}
+
+.sidebar-search-dropdown {
+  position: absolute;
+  top: calc(100% + 0.3rem);
+  left: 0;
+  width: 320px;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  padding: 0.4rem;
+  z-index: 50;
+}
+
+.sidebar-search-dropdown .muted {
+  padding: 0.4rem 0.5rem;
+  margin: 0;
+}
+
+.sidebar-search-section-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  padding: 0.5rem 0.5rem 0.2rem;
+}
+
+.sidebar-search-result {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text);
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-search-result:hover {
+  background: var(--surface-alt);
+}
+
+.sidebar-search-see-all {
+  border-top: 1px solid var(--border);
+  margin-top: 0.3rem;
+  padding-top: 0.5rem;
+  color: var(--accent);
+}
+
 .nav-list {
   list-style: none;
   padding: 0;
@@ -427,6 +556,31 @@ hr {
   margin: 0.3rem 0;
 }
 
+/* Expenses page's income summary card (expenses.js) -- four stat blocks
+   (confirmed/statements/expenses/net) in a row, same spirit as
+   .totals-all-time above but for several numbers at once. */
+.income-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.income-stat-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.income-stat-value {
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin-top: 0.2rem;
+}
+
+.income-stat-net .income-stat-value {
+  color: var(--accent);
+}
+
 .toolbar {
   display: flex;
   gap: 1.5rem;
@@ -442,6 +596,22 @@ hr {
 .toolbar select {
   width: auto;
   min-width: 160px;
+}
+
+.toolbar input[type="search"] {
+  width: auto;
+  min-width: 260px;
+  max-width: 420px;
+}
+
+/* orders.js swaps #new-order-controls' contents between a client
+   picker+button and an empty-state hint -- display:contents makes the
+   wrapper itself invisible to layout, so whichever children are inside
+   it become flex items of .toolbar directly (same spacing/alignment as
+   the Status/Sort controls) instead of getting boxed into their own
+   sub-row. */
+#new-order-controls {
+  display: contents;
 }
 
 /* Quick-status <select> embedded directly in a table cell -- smaller and
@@ -590,7 +760,7 @@ hr {
 }
 
 .due-summary-amber h3 {
-  color: #f59e0b;
+  color: var(--warning);
 }
 
 .due-summary-muted h3 {
@@ -628,4 +798,90 @@ hr {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1rem;
+}
+
+/* Theme picker (Settings > Appearance, settings.js). Each swatch previews
+   its theme's background/accent as a two-tone circle -- src/renderer/
+   theme.js supplies the actual hex values via inline style, this file
+   only lays out the button/circle/label. */
+.theme-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.theme-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  width: 84px;
+  background: none;
+  border: 2px solid transparent;
+  border-radius: var(--radius);
+  padding: 0.5rem 0.4rem;
+}
+
+.theme-swatch:hover {
+  background: var(--surface-alt);
+}
+
+.theme-swatch.active {
+  border-color: var(--accent);
+}
+
+.theme-swatch-preview {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+}
+
+.theme-swatch-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* Sakura theme's decorative petals -- mounted/unmounted by
+   src/renderer/theme.js only while the Sakura theme is active.
+   pointer-events: none means they can never intercept a click no matter
+   their z-index; kept below dropdowns/modals so nothing visually clips
+   through them either. */
+.sakura-petals {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 40;
+}
+
+.sakura-petal {
+  position: absolute;
+  top: -5%;
+  left: var(--petal-left, 50%);
+  width: 10px;
+  height: 10px;
+  background: var(--accent);
+  opacity: 0.55;
+  border-radius: 0 100% 0 100%;
+  animation: sakura-fall var(--petal-duration, 14s) linear infinite;
+  animation-delay: var(--petal-delay, 0s);
+}
+
+@keyframes sakura-fall {
+  0% {
+    transform: translateY(-10vh) translateX(0) rotate(0deg);
+  }
+  100% {
+    transform: translateY(110vh) translateX(40px) rotate(300deg);
+  }
+}
+
+/* Respect the OS's reduced-motion preference -- petals stay present
+   (still visually on-theme) but stop animating. */
+@media (prefers-reduced-motion: reduce) {
+  .sakura-petal {
+    animation: none;
+  }
 }

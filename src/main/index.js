@@ -18,6 +18,10 @@ const { registerPlatformAccountIpc } = require('./ipc/platformAccountIpc');
 const { registerOrderIpc } = require('./ipc/orderIpc');
 const { registerOrderAttachmentIpc } = require('./ipc/orderAttachmentIpc');
 const { registerCalendarEventIpc } = require('./ipc/calendarEventIpc');
+const { registerSearchIpc } = require('./ipc/searchIpc');
+const { registerExpenseIpc } = require('./ipc/expenseIpc');
+const { registerIncomeStatementIpc } = require('./ipc/incomeStatementIpc');
+const { registerIncomeStatementAttachmentIpc } = require('./ipc/incomeStatementAttachmentIpc');
 const { registerSettingsIpc } = require('./ipc/settingsIpc');
 const { registerUpdateIpc } = require('./ipc/updateIpc');
 const idleLock = require('./security/idleLock');
@@ -63,6 +67,10 @@ app.whenReady().then(() => {
   registerOrderIpc();
   registerOrderAttachmentIpc();
   registerCalendarEventIpc();
+  registerSearchIpc();
+  registerExpenseIpc();
+  registerIncomeStatementIpc();
+  registerIncomeStatementAttachmentIpc();
   registerSettingsIpc();
   registerUpdateIpc();
 

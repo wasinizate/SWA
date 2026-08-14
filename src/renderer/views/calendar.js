@@ -24,6 +24,7 @@ import {
   toDateInputValue,
   fromDateInputValue,
 } from '../helpers.js';
+import { isLightTheme } from '../theme.js';
 
 const EVENT_TYPE_PRESETS = ['Delivery deadline', 'Custom shoot', 'Screening call', 'Follow-up', 'Personal reminder', 'Other'];
 
@@ -46,6 +47,11 @@ function orderDueEventId(orderId) {
 }
 
 export function renderCalendarView(container, { navigate }) {
+  // FullCalendar's built-in dark palette is only appropriate for this
+  // app's dark themes -- Sakura is light, so let FullCalendar fall back
+  // to its own light default there instead of forcing dark-on-light.
+  const colorSchemeAttr = isLightTheme() ? '' : ' data-color-scheme="dark"';
+
   container.innerHTML = `
     <div class="section-header">
       <h1>Calendar</h1>
@@ -54,7 +60,7 @@ export function renderCalendarView(container, { navigate }) {
         <button type="button" id="new-event">+ New event</button>
       </div>
     </div>
-    <div id="calendar-mount" data-color-scheme="dark"></div>
+    <div id="calendar-mount"${colorSchemeAttr}></div>
   `;
 
   container.querySelector('#export-all-ics').addEventListener('click', async () => {

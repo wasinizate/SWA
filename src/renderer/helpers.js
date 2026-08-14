@@ -68,6 +68,12 @@ export const PAYMENT_METHOD_PRESETS = [
   'Other',
 ];
 
+// Suggested values for the expense category field (see views/expenses.js),
+// shown via an <input list> + <datalist> combo -- same "free text, not an
+// enum" approach as PAYMENT_METHOD_PRESETS above, since costs vary a lot
+// from person to person.
+export const EXPENSE_CATEGORY_PRESETS = ['Supplies', 'Software/Subscriptions', 'Marketing', 'Travel', 'Fees', 'Other'];
+
 // The fixed set of order statuses. Stored as free TEXT in the database
 // (see 0001_init.sql's comments), but the renderer only ever writes one
 // of these five values via <select> elements built from this list.

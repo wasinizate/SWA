@@ -6,6 +6,7 @@ const DEFAULT_IDLE_TIMEOUT_SECONDS = 600; // 10 minutes
 const DEFAULT_ORDER_DUE_REMINDER_ENABLED = true;
 const DEFAULT_ORDER_DUE_REMINDER_DAYS_BEFORE = 1;
 const DEFAULT_SHOW_DUE_SUMMARY_ON_OPEN = true;
+const DEFAULT_THEME = 'default';
 
 // Small internal helpers shared by every setting below -- app_settings is
 // a plain key/value table (see 0001_init.sql), so every getter/setter
@@ -56,6 +57,17 @@ function setShowDueSummaryOnOpen(enabled) {
   setSetting('show_due_summary_on_open', enabled ? '1' : '0');
 }
 
+// The renderer validates the theme id against its own known list (see
+// renderer/theme.js) before ever applying it -- this just stores
+// whatever string it's given, same as every other setting here.
+function getTheme() {
+  return getSetting('theme', DEFAULT_THEME);
+}
+
+function setTheme(theme) {
+  setSetting('theme', theme);
+}
+
 module.exports = {
   DEFAULT_IDLE_TIMEOUT_SECONDS,
   getIdleTimeoutSeconds,
@@ -66,4 +78,7 @@ module.exports = {
   setOrderDueReminderDaysBefore,
   getShowDueSummaryOnOpen,
   setShowDueSummaryOnOpen,
+  DEFAULT_THEME,
+  getTheme,
+  setTheme,
 };

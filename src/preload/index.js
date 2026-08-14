@@ -56,6 +56,8 @@ contextBridge.exposeInMainWorld('api', {
     listWithDeliveryDueDates: () => ipcRenderer.invoke('order:listWithDeliveryDueDates'),
     getDueDateSummary: () => ipcRenderer.invoke('order:getDueDateSummary'),
     exportPdf: (id) => ipcRenderer.invoke('order:exportPdf', id),
+    getSlatedIncomeTotals: () => ipcRenderer.invoke('order:getSlatedIncomeTotals'),
+    getTotalsAll: () => ipcRenderer.invoke('order:getTotalsAll'),
   },
   orderAttachment: {
     listByOrder: (orderId) => ipcRenderer.invoke('orderAttachment:listByOrder', orderId),
@@ -73,10 +75,38 @@ contextBridge.exposeInMainWorld('api', {
     exportIcs: (id) => ipcRenderer.invoke('calendarEvent:exportIcs', id),
     exportAllIcs: () => ipcRenderer.invoke('calendarEvent:exportAllIcs'),
   },
+  search: {
+    query: (queryText) => ipcRenderer.invoke('search:query', queryText),
+  },
+  expense: {
+    listAll: () => ipcRenderer.invoke('expense:listAll'),
+    get: (id) => ipcRenderer.invoke('expense:get', id),
+    create: (data) => ipcRenderer.invoke('expense:create', data),
+    update: (id, data) => ipcRenderer.invoke('expense:update', id, data),
+    delete: (id) => ipcRenderer.invoke('expense:delete', id),
+    getTotals: () => ipcRenderer.invoke('expense:getTotals'),
+  },
+  incomeStatement: {
+    listAll: () => ipcRenderer.invoke('incomeStatement:listAll'),
+    get: (id) => ipcRenderer.invoke('incomeStatement:get', id),
+    create: (data) => ipcRenderer.invoke('incomeStatement:create', data),
+    update: (id, data) => ipcRenderer.invoke('incomeStatement:update', id, data),
+    delete: (id) => ipcRenderer.invoke('incomeStatement:delete', id),
+    getTotals: () => ipcRenderer.invoke('incomeStatement:getTotals'),
+  },
+  incomeStatementAttachment: {
+    listByStatement: (incomeStatementId) => ipcRenderer.invoke('incomeStatementAttachment:listByStatement', incomeStatementId),
+    add: (data) => ipcRenderer.invoke('incomeStatementAttachment:add', data),
+    get: (id) => ipcRenderer.invoke('incomeStatementAttachment:get', id),
+    delete: (id) => ipcRenderer.invoke('incomeStatementAttachment:delete', id),
+    saveToDisk: (id) => ipcRenderer.invoke('incomeStatementAttachment:saveToDisk', id),
+  },
   settings: {
     getOrderDueReminderConfig: () => ipcRenderer.invoke('settings:getOrderDueReminderConfig'),
     setOrderDueReminderConfig: (enabled, daysBefore, showSummaryOnOpen) =>
       ipcRenderer.invoke('settings:setOrderDueReminderConfig', { enabled, daysBefore, showSummaryOnOpen }),
+    getTheme: () => ipcRenderer.invoke('settings:getTheme'),
+    setTheme: (theme) => ipcRenderer.invoke('settings:setTheme', theme),
   },
   update: {
     // Manual, opt-in only -- see updates/checkForUpdates.js. Nothing

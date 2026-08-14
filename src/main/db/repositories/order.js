@@ -185,6 +185,63 @@ function getTotalsByPerson(personId) {
   return { allTimeCents, byYear, byMonth };
 }
 
+// Money expected but not yet confirmed -- orders that haven't been paid
+// yet and aren't cancelled. A companion to getTotalsByPerson()/
+// getTotalsAll() (which only count confirmed, date_paid money) for the
+// Expenses page's "slated income" card. Returns the underlying orders
+// too (not just the sum) so the UI can show which ones make it up,
+// same join shape as listAll().
+function getSlatedIncomeTotals() {
+  const db = getDb();
+  const where = `date_paid IS NULL AND status != 'cancelled'`;
+
+  const totalCents = db
+    .prepare(`SELECT COALESCE(SUM(amount_cents), 0) AS total_cents FROM orders WHERE ${where}`)
+    .get().total_cents;
+
+  const orders = db
+    .prepare(
+      `SELECT orders.id, orders.person_id, persons.private_label AS person_label,
+              orders.amount_cents, orders.currency, orders.status, orders.delivery_due_date
+       FROM orders
+       JOIN persons ON persons.id = orders.person_id
+       WHERE ${where}
+       ORDER BY orders.delivery_due_date IS NULL, orders.delivery_due_date ASC, orders.created_at DESC`
+    )
+    .all();
+
+  return { totalCents, orders };
+}
+
+// Same all-time/by-year/by-month shape as getTotalsByPerson(), but
+// across every person -- needed by the Expenses page's business-wide
+// "confirmed income" figure, which has no single person to scope to.
+function getTotalsAll() {
+  const db = getDb();
+  const where = `date_paid IS NOT NULL AND status != 'cancelled'`;
+
+  const allTimeCents = db.prepare(`SELECT COALESCE(SUM(amount_cents), 0) AS total_cents FROM orders WHERE ${where}`).get()
+    .total_cents;
+
+  const byYear = db
+    .prepare(
+      `SELECT strftime('%Y', date_paid) AS period, SUM(amount_cents) AS total_cents
+       FROM orders WHERE ${where}
+       GROUP BY period ORDER BY period DESC`
+    )
+    .all();
+
+  const byMonth = db
+    .prepare(
+      `SELECT strftime('%Y-%m', date_paid) AS period, SUM(amount_cents) AS total_cents
+       FROM orders WHERE ${where}
+       GROUP BY period ORDER BY period DESC`
+    )
+    .all();
+
+  return { allTimeCents, byYear, byMonth };
+}
+
 // Converts a raw (snake_case) DB row into the camelCase shape used by
 // create()/update() inputs, so update() can merge a partial patch onto the
 // existing row without repeating every field name twice.
@@ -215,4 +272,6 @@ module.exports = {
   listWithDeliveryDueDates,
   markDueReminderNotified,
   getDueDateSummary,
+  getSlatedIncomeTotals,
+  getTotalsAll,
 };

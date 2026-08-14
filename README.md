@@ -7,10 +7,12 @@ encrypted SQLite database.
 
 **Status: active development.** Electron shell, encrypted DB layer, full
 CRUD for People/Platform Accounts/Orders (with attachments, a price
-calculator, purchase totals, and PDF export), and a FullCalendar-based
-Calendar are implemented. Desktop reminders, .ics export, an Expenses/
-Budget tab, and search are planned next (Expenses still shows as a
-disabled "Coming in a later phase" nav item).
+calculator, purchase totals, and PDF export), a FullCalendar-based
+Calendar (with desktop reminders and .ics export), search (an
+always-visible sidebar quick-search plus a dedicated results page), a
+theme picker, and an Expenses tab (expense ledger, slated income, and
+manually-entered platform pay-statement totals) are all implemented.
+Budget *targets* (per-category spending limits) are not built yet.
 
 ## Why this exists
 
@@ -97,7 +99,12 @@ sandboxed preload); see
   description, file attachments, feedback/reflection notes.
 - **CalendarEvent** — a date/time on the calendar, optionally linked to
   an Order (e.g. its delivery due date).
-- *(Planned)* **Expense** — not yet implemented.
+- **Expense** — a business cost (date, amount, free-text category,
+  description), independent of any Person/Order.
+- **IncomeStatement** — a manually-entered total from a platform's
+  periodic pay statement (period, platform, gross/fees/net, and
+  attachments for the source PDF) — an approximation tool, not parsed
+  automatically from the PDF (see the Expenses tab in-app for why).
 
 See [`src/main/db/migrations/0001_init.sql`](src/main/db/migrations/0001_init.sql)
 for the full schema and comments on specific choices (e.g. money is

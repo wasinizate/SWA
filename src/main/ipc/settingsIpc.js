@@ -35,6 +35,16 @@ function registerSettingsIpc() {
     settingsRepo.setShowDueSummaryOnOpen(showSummaryOnOpen);
     return { enabled, daysBefore, showSummaryOnOpen };
   });
+
+  ipcMain.handle('settings:getTheme', () => {
+    if (!connection.isOpen()) return null;
+    return settingsRepo.getTheme();
+  });
+
+  ipcMain.handle('settings:setTheme', (_event, theme) => {
+    settingsRepo.setTheme(theme);
+    return theme;
+  });
 }
 
 module.exports = { registerSettingsIpc };

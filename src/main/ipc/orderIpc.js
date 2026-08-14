@@ -15,6 +15,8 @@ function registerOrderIpc() {
   ipcMain.handle('order:getTotalsByPerson', (_event, personId) => orderRepo.getTotalsByPerson(personId));
   ipcMain.handle('order:listWithDeliveryDueDates', () => orderRepo.listWithDeliveryDueDates());
   ipcMain.handle('order:getDueDateSummary', () => orderRepo.getDueDateSummary(settingsRepo.getOrderDueReminderDaysBefore()));
+  ipcMain.handle('order:getSlatedIncomeTotals', () => orderRepo.getSlatedIncomeTotals());
+  ipcMain.handle('order:getTotalsAll', () => orderRepo.getTotalsAll());
   ipcMain.handle('order:exportPdf', (event, orderId) => {
     const parentWindow = BrowserWindow.fromWebContents(event.sender);
     return exportOrderPdf(orderId, parentWindow);

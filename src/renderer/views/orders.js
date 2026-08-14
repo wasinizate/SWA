@@ -25,6 +25,7 @@ export function renderOrdersView(container, { navigate }) {
           <option value="placed_asc">Oldest placed</option>
         </select>
       </label>
+      <div id="new-order-controls"></div>
     </div>
 
     <table class="data-table">
@@ -38,12 +39,43 @@ export function renderOrdersView(container, { navigate }) {
   const rowsEl = container.querySelector('#rows');
   const filterSelect = container.querySelector('#filter-status');
   const sortSelect = container.querySelector('#sort-by');
+  const newOrderControls = container.querySelector('#new-order-controls');
 
   let allOrders = [];
+  let allPeople = [];
 
   async function load() {
-    allOrders = await window.api.order.listAll();
+    [allOrders, allPeople] = await Promise.all([window.api.order.listAll(), window.api.person.list()]);
+    renderNewOrderControls();
     render();
+  }
+
+  // A blank order needs a person_id (NOT NULL FK) -- unlike
+  // personDetail.js's own "+ New order" button, this page has no person
+  // context of its own, so a client picker stands in for it. Creating
+  // drops you straight onto the new order's own page to fill in the
+  // rest, same flow as personDetail.js's button.
+  function renderNewOrderControls() {
+    if (allPeople.length === 0) {
+      newOrderControls.innerHTML = `<p class="hint">Add a client first to create an order.</p>`;
+      return;
+    }
+
+    newOrderControls.innerHTML = `
+      <label>
+        New order for
+        <select id="new-order-person">
+          ${allPeople.map((p) => `<option value="${p.id}">${escapeHtml(p.private_label)}</option>`).join('')}
+        </select>
+      </label>
+      <button type="button" id="new-order-btn">+ New order</button>
+    `;
+
+    newOrderControls.querySelector('#new-order-btn').addEventListener('click', async () => {
+      const personId = Number(newOrderControls.querySelector('#new-order-person').value);
+      const order = await window.api.order.create({ personId, status: 'pending', amountCents: 0 });
+      navigate('orderDetail', { orderId: order.id });
+    });
   }
 
   function render() {

@@ -1,0 +1,126 @@
+// Global search across Clients (People) and Orders. A dedicated nav item
+// + page rather than an always-visible box -- the app has no persistent
+// header chrome today, so this follows the same page-based pattern as
+// every other feature (Clients/Orders/Calendar/Settings).
+//
+// Results link straight to the existing Person/Order detail pages (not a
+// calendar deep link) -- see ROADMAP.md for why.
+
+import { escapeHtml, formatMoney, previewText, orderStatusLabel } from '../helpers.js';
+
+const MIN_QUERY_LENGTH = 2; // must match search.js's MIN_QUERY_LENGTH on the main side
+const DEBOUNCE_MS = 200;
+
+export function renderSearchView(container, { navigate, query: initialQuery }) {
+  container.innerHTML = `
+    <h1>Search</h1>
+    <p class="muted">Search clients (label, notes, platform handles) and orders (description, feedback, payment method).</p>
+
+    <div class="toolbar">
+      <input type="search" id="search-input" placeholder="Type at least ${MIN_QUERY_LENGTH} characters…" autofocus />
+    </div>
+
+    <div id="search-results"></div>
+  `;
+
+  const input = container.querySelector('#search-input');
+  const resultsEl = container.querySelector('#search-results');
+
+  let debounceHandle = null;
+  // Bumped on every new search; a slower older response is discarded if a
+  // newer one already landed, so fast typing can't flash stale results.
+  let requestId = 0;
+
+  function renderMessage(message) {
+    resultsEl.innerHTML = `<p class="muted">${escapeHtml(message)}</p>`;
+  }
+
+  function renderResults(people, orders) {
+    if (people.length === 0 && orders.length === 0) {
+      renderMessage('No matches.');
+      return;
+    }
+
+    const peopleSection =
+      people.length === 0
+        ? ''
+        : `
+      <h2>Clients (${people.length})</h2>
+      <table class="data-table">
+        <thead><tr><th>Client</th><th>Notes</th></tr></thead>
+        <tbody>
+          ${people
+            .map(
+              (p) => `
+            <tr>
+              <td><button class="link-button" data-open-person="${p.id}">${escapeHtml(p.private_label)}</button></td>
+              <td><div class="description-preview">${escapeHtml(previewText(p.general_notes || p.screening_notes))}</div></td>
+            </tr>`
+            )
+            .join('')}
+        </tbody>
+      </table>`;
+
+    const ordersSection =
+      orders.length === 0
+        ? ''
+        : `
+      <h2>Orders (${orders.length})</h2>
+      <table class="data-table">
+        <thead><tr><th>#</th><th>Client</th><th>Date paid</th><th>Amount</th><th>Status</th><th>Description</th></tr></thead>
+        <tbody>
+          ${orders
+            .map(
+              (o) => `
+            <tr>
+              <td><button class="link-button" data-open-order="${o.id}">#${o.id}</button></td>
+              <td><button class="link-button" data-open-person="${o.person_id}">${escapeHtml(o.person_label)}</button></td>
+              <td>${o.date_paid ?? ''}</td>
+              <td>${formatMoney(o.amount_cents, o.currency)}</td>
+              <td>${escapeHtml(orderStatusLabel(o.status))}</td>
+              <td><div class="description-preview">${escapeHtml(previewText(o.description))}</div></td>
+            </tr>`
+            )
+            .join('')}
+        </tbody>
+      </table>`;
+
+    resultsEl.innerHTML = peopleSection + ordersSection;
+
+    resultsEl.querySelectorAll('[data-open-person]').forEach((btn) => {
+      btn.addEventListener('click', () => navigate('personDetail', { personId: Number(btn.dataset.openPerson) }));
+    });
+    resultsEl.querySelectorAll('[data-open-order]').forEach((btn) => {
+      btn.addEventListener('click', () => navigate('orderDetail', { orderId: Number(btn.dataset.openOrder) }));
+    });
+  }
+
+  async function runSearch() {
+    const query = input.value.trim();
+    if (query.length < MIN_QUERY_LENGTH) {
+      renderMessage(`Type at least ${MIN_QUERY_LENGTH} characters to search.`);
+      return;
+    }
+
+    const thisRequest = ++requestId;
+    const { people, orders } = await window.api.search.query(query);
+    if (thisRequest !== requestId) return; // superseded by a newer keystroke
+
+    renderResults(people, orders);
+  }
+
+  input.addEventListener('input', () => {
+    clearTimeout(debounceHandle);
+    debounceHandle = setTimeout(runSearch, DEBOUNCE_MS);
+  });
+
+  // Arriving here from the sidebar quick-search's "See all results" link
+  // (shell.js) pre-fills and runs the query immediately, rather than
+  // making the user retype it.
+  if (initialQuery) {
+    input.value = initialQuery;
+    runSearch();
+  } else {
+    renderMessage(`Type at least ${MIN_QUERY_LENGTH} characters to search.`);
+  }
+}
