@@ -1,7 +1,16 @@
 # Packaging config for electron-builder. Targets for all three desktop
-# platforms are defined here (per the project's cross-platform goal), but
-# only the Windows target has actually been built/tested so far -- see
-# README.md.
+# platforms are defined here (per the project's cross-platform goal);
+# Windows is built/tested locally, macOS is built by
+# .github/workflows/build-macos.yml on GitHub's own macOS runners -- see
+# README.md's Cross-platform status section.
+#
+# electron-builder auto-detects "building from a CI-tagged commit" and
+# will otherwise try to publish to GitHub itself using its own built-in
+# publish support -- package.json's "package" script passes
+# `--publish never` to disable that, since build-macos.yml's own
+# `gh release upload` step is what actually publishes the build. Leave
+# that flag in place; without it, `npm run package` fails on a tagged
+# commit in CI with "GitHub Personal Access Token is not set."
 appId: com.wasinizate.swa
 productName: SWA
 directories:
@@ -18,7 +27,16 @@ asarUnpack:
 win:
   target: nsis
 mac:
-  target: dmg
+  # Explicit arch list -- GitHub's macos-latest runners are Apple
+  # Silicon, so without this only an arm64 build would come out, leaving
+  # Intel Mac users with nothing. Two separate .dmg files (not a single
+  # "universal2" one) since better-sqlite3-multiple-ciphers' native
+  # binary has to be built per-architecture anyway.
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
   category: public.app-category.business
 linux:
   target: AppImage
