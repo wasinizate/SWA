@@ -12,6 +12,7 @@
 
 const { app, BrowserWindow } = require('electron');
 const { createMainWindow } = require('./window');
+const { installMacMenu } = require('./menu');
 const { registerVaultIpc } = require('./ipc/vaultIpc');
 const { registerPersonIpc } = require('./ipc/personIpc');
 const { registerPlatformAccountIpc } = require('./ipc/platformAccountIpc');
@@ -61,6 +62,8 @@ function notifyUnlocked() {
 }
 
 app.whenReady().then(() => {
+  installMacMenu();
+
   registerVaultIpc({ onUnlocked: notifyUnlocked, onLocked: notifyLocked });
   registerPersonIpc();
   registerPlatformAccountIpc();

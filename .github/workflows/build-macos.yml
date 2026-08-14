@@ -1,0 +1,45 @@
+name: Build macOS installer
+
+# Runs on GitHub's own macOS hardware -- better-sqlite3-multiple-ciphers'
+# native binary has to be compiled *on* macOS (no cross-compiling that
+# from Windows/Linux), so this is how a Mac build gets produced without
+# anyone on the project needing to own a Mac. Unsigned/not notarized for
+# now (see README's Installing section for the Gatekeeper workaround
+# that implies).
+on:
+  push:
+    tags:
+      - "v*"
+  # Lets this be re-run by hand from the Actions tab for a tag that was
+  # already pushed (e.g. to backfill a macOS build onto a release that
+  # was cut before this workflow existed).
+  workflow_dispatch:
+
+permissions:
+  contents: write # so the built-in GITHUB_TOKEN can upload/create a release
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - run: npm ci
+
+      - run: npm run package
+
+      - name: Upload the .dmg to the GitHub Release for this tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/*.dmg dist/*.dmg.blockmap --clobber
+          else
+            gh release create "$TAG" dist/*.dmg dist/*.dmg.blockmap --title "$TAG" --generate-notes
+          fi

@@ -32,10 +32,12 @@ exact OS/architecture. You do **not** need Node.js, npm, or anything
 else on your machine first; the app never reaches out to anything on
 your system beyond your own filesystem.
 
-(Windows-only so far, see [Cross-platform status](#cross-platform-status).
-Since it isn't code-signed, Windows SmartScreen will warn on first run;
-that's expected for an early release without a paid signing certificate,
-not a sign anything is wrong.)
+(Windows and macOS builds are available, see
+[Cross-platform status](#cross-platform-status). Neither is code-signed
+yet, so you'll see a first-run warning either way — Windows SmartScreen,
+or on macOS a Gatekeeper "app is damaged" prompt (right-click the app →
+Open to bypass it). Both are expected for an early release without a
+paid signing certificate, not a sign anything is wrong.)
 
 The first launch will ask you to set a passphrase — this encrypts the
 database file. **There is no password reset.** Write your passphrase down
@@ -191,9 +193,14 @@ not enabling quick unlock — is on you to add.
 The code and packaging config are written to be platform-agnostic
 (`app.getPath('userData')`, Electron's `safeStorage`/`powerMonitor` APIs
 all behave correctly per-OS), and `electron-builder.yml` defines targets
-for Windows, macOS, and Linux. So far this has only actually been run and
-packaged on Windows — if you build/test it on macOS or Linux, contributions
-documenting or fixing any platform-specific issues are welcome.
+for Windows, macOS, and Linux. Windows builds are made and tested
+locally by the maintainer. macOS builds are produced by
+[`.github/workflows/build-macos.yml`](.github/workflows/build-macos.yml)
+on GitHub's own macOS runners (this project has no Mac hardware of its
+own) — they're not manually tested beyond that build succeeding, so if
+you hit a macOS-specific issue, please report it. Linux isn't built or
+tested yet at all; contributions documenting or fixing platform-specific
+issues there are welcome.
 
 ## Contributing
 
