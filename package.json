@@ -5,7 +5,7 @@
   "description": "SWA (Sex Worker Assistant) -- a local-first, encrypted desktop CRM for independent workers managing clients across multiple online platforms.",
   "main": "src/main/index.js",
   "private": true,
-  "license": "MIT",
+  "license": "GPL-3.0",
   "author": "wasinizate",
   "scripts": {
     "start": "electron .",
