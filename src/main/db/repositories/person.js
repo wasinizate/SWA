@@ -12,6 +12,7 @@
 // with no functional benefit -- "Client" is a display-label choice, not
 // a data-model change.
 
+const crypto = require('crypto');
 const { getDb } = require('../connection');
 
 function list() {
@@ -53,4 +54,36 @@ function remove(id) {
   getDb().prepare('DELETE FROM persons WHERE id = ?').run(id);
 }
 
-module.exports = { list, get, create, update, remove };
+// Cross-instance export/import support (see src/main/dataExchange/) --
+// external_id is a portable UUID, distinct from the local id above.
+function getByExternalId(externalId) {
+  return getDb().prepare('SELECT * FROM persons WHERE external_id = ?').get(externalId);
+}
+
+// Generates and persists a UUID for this person if they don't already
+// have one, then returns it either way. Called right before a person is
+// included in an export -- most persons never get one, since most are
+// never exported.
+function ensureExternalId(id) {
+  const existing = get(id);
+  if (!existing) throw new Error(`Person ${id} not found.`);
+  if (existing.external_id) return existing.external_id;
+
+  const externalId = crypto.randomUUID();
+  getDb().prepare('UPDATE persons SET external_id = ? WHERE id = ?').run(externalId, id);
+  return externalId;
+}
+
+// Unconditionally assigns an external_id -- used only when applyImport.js
+// creates a brand-new local person to represent an imported one, so the
+// new local row shares the *source's* external_id (making a repeat
+// import of the same person recognize this row directly via
+// getByExternalId(), no person_external_links entry even needed).
+// ensureExternalId() above is for the opposite direction (mint a fresh
+// id for a local person about to be exported) and never overwrites an
+// existing one -- this always does, so it's kept separate.
+function setExternalId(id, externalId) {
+  getDb().prepare('UPDATE persons SET external_id = ? WHERE id = ?').run(externalId, id);
+}
+
+module.exports = { list, get, create, update, remove, getByExternalId, ensureExternalId, setExternalId };

@@ -253,6 +253,25 @@ button.link-button {
   font-size: 0.85rem;
 }
 
+/* Field-level diff blocks in the Import card's preview (settings.js) --
+   one per changed client/order, listing "Label: old -> new" lines. */
+.import-change-block {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.8rem;
+  margin: 0.5rem 0;
+}
+
+.import-change-block strong {
+  font-size: 0.85rem;
+}
+
+.import-changes-list {
+  margin: 0.3rem 0 0;
+  padding-left: 1.2rem;
+  font-size: 0.85rem;
+}
+
 .muted {
   color: var(--text-muted);
 }

@@ -101,6 +101,14 @@ contextBridge.exposeInMainWorld('api', {
     delete: (id) => ipcRenderer.invoke('incomeStatementAttachment:delete', id),
     saveToDisk: (id) => ipcRenderer.invoke('incomeStatementAttachment:saveToDisk', id),
   },
+  dataExchange: {
+    exportPerson: (personId, passphrase) => ipcRenderer.invoke('dataExchange:exportPerson', { personId, passphrase }),
+    exportOrder: (orderId, personId, passphrase) =>
+      ipcRenderer.invoke('dataExchange:exportOrder', { orderId, personId, passphrase }),
+    previewImport: (fileContents, passphrase) => ipcRenderer.invoke('dataExchange:previewImport', { fileContents, passphrase }),
+    applyImport: (fileContents, passphrase, resolution) =>
+      ipcRenderer.invoke('dataExchange:applyImport', { fileContents, passphrase, resolution }),
+  },
   settings: {
     getOrderDueReminderConfig: () => ipcRenderer.invoke('settings:getOrderDueReminderConfig'),
     setOrderDueReminderConfig: (enabled, daysBefore, showSummaryOnOpen) =>

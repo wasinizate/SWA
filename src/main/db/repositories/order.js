@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const { getDb } = require('../connection');
 
 function listByPerson(personId) {
@@ -36,6 +37,13 @@ function create({
   status = 'pending',
   deliveryDueDate = null,
   deliveryDueTime = null,
+  // Only ever passed by applyImport.js -- preserves the *source*
+  // order's external_id on the newly-created local row, so re-importing
+  // the same export file later is recognized as a dupe via
+  // getByExternalId() instead of generating a fresh id and duplicating.
+  // Every other caller leaves this null and gets one lazily later (see
+  // ensureExternalId()) if/when the order is itself exported.
+  externalId = null,
 }) {
   if (!personId) throw new Error('personId is required.');
 
@@ -43,8 +51,8 @@ function create({
     .prepare(
       `INSERT INTO orders (
          person_id, platform_account_id, amount_cents, currency,
-         date_paid, payment_method, description, status, delivery_due_date, delivery_due_time
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         date_paid, payment_method, description, status, delivery_due_date, delivery_due_time, external_id
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       personId,
@@ -56,7 +64,8 @@ function create({
       description,
       status,
       deliveryDueDate,
-      deliveryDueTime
+      deliveryDueTime,
+      externalId
     );
   return get(result.lastInsertRowid);
 }
@@ -242,6 +251,23 @@ function getTotalsAll() {
   return { allTimeCents, byYear, byMonth };
 }
 
+// Cross-instance export/import support (see src/main/dataExchange/) --
+// same pair as person.js's getByExternalId()/ensureExternalId(), for
+// deduping an order that's already been imported once before.
+function getByExternalId(externalId) {
+  return getDb().prepare('SELECT * FROM orders WHERE external_id = ?').get(externalId);
+}
+
+function ensureExternalId(id) {
+  const existing = get(id);
+  if (!existing) throw new Error(`Order ${id} not found.`);
+  if (existing.external_id) return existing.external_id;
+
+  const externalId = crypto.randomUUID();
+  getDb().prepare('UPDATE orders SET external_id = ? WHERE id = ?').run(externalId, id);
+  return externalId;
+}
+
 // Converts a raw (snake_case) DB row into the camelCase shape used by
 // create()/update() inputs, so update() can merge a partial patch onto the
 // existing row without repeating every field name twice.
@@ -274,4 +300,6 @@ module.exports = {
   getDueDateSummary,
   getSlatedIncomeTotals,
   getTotalsAll,
+  getByExternalId,
+  ensureExternalId,
 };

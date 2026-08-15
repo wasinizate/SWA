@@ -9,6 +9,10 @@ function createMainWindow() {
     height: 750,
     minWidth: 800,
     minHeight: 560,
+    // electron-builder's icon config (build/icon.png) only applies to a
+    // packaged build -- this is what makes `npm start`'s dev-mode window
+    // show the same icon instead of Electron's default one.
+    icon: path.join(__dirname, '..', '..', 'build', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'index.js'),
       // These three settings keep the renderer's web content (which loads

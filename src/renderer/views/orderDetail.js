@@ -12,6 +12,7 @@ import {
   PAYMENT_METHOD_PRESETS,
   buildStatusOptions,
 } from '../helpers.js';
+import { promptForPassphrase } from '../exportPassphrasePrompt.js';
 
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024; // keep in sync with orderAttachmentIpc.js's server-side cap
 
@@ -77,6 +78,7 @@ export function renderOrderDetailView(container, { navigate, orderId }) {
           <div class="form-actions">
             <button type="submit">Save changes</button>
             <button type="button" class="btn-secondary" id="order-export-pdf">Export PDF</button>
+            <button type="button" class="btn-secondary" id="order-export-data">Export order</button>
             <button type="button" class="danger" id="order-delete">Delete order</button>
           </div>
           <p class="hint" id="save-confirmation" hidden>Saved.</p>
@@ -157,6 +159,27 @@ export function renderOrderDetailView(container, { navigate, orderId }) {
         alert(`Failed to export PDF: ${err.message}`);
       } finally {
         btn.disabled = false;
+      }
+    });
+
+    // Exports just this order (and its client's identity, so the
+    // recipient's instance can attach it to the right person) to a
+    // passphrase-encrypted file -- see settings.js's "Import" card and
+    // personDetail.js's "Export client" button (same underlying
+    // mechanism, this is the single-order version of it).
+    container.querySelector('#order-export-data').addEventListener('click', async () => {
+      const passphrase = await promptForPassphrase({
+        title: 'Export order',
+        helpText:
+          "Choose a passphrase to protect this file, then share it with the recipient a different way than the file itself (e.g. tell them in person or a separate message) -- not your vault passphrase.",
+      });
+      if (!passphrase) return;
+
+      try {
+        const savedPath = await window.api.dataExchange.exportOrder(orderId, order.person_id, passphrase);
+        if (savedPath) alert(`Saved to:\n${savedPath}`);
+      } catch (err) {
+        alert(`Failed to export: ${err.message}`);
       }
     });
 

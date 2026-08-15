@@ -6,6 +6,7 @@
 // "click New Ticket, land on the ticket" flow as a ticketing system).
 
 import { escapeHtml, formatMoney, buildStatusOptions } from '../helpers.js';
+import { promptForPassphrase } from '../exportPassphrasePrompt.js';
 
 export function renderPersonDetailView(container, { navigate, personId }) {
   container.innerHTML = '<p>Loading...</p>';
@@ -49,7 +50,10 @@ export function renderPersonDetailView(container, { navigate, personId }) {
       <section class="card">
         <div class="section-header">
           <h2>Orders</h2>
-          <button type="button" id="new-order">+ New order</button>
+          <div class="row-actions">
+            <button type="button" class="btn-secondary" id="export-client">Export client</button>
+            <button type="button" id="new-order">+ New order</button>
+          </div>
         </div>
 
         <div class="totals-card">
@@ -101,6 +105,27 @@ export function renderPersonDetailView(container, { navigate, personId }) {
     container.querySelector('#new-order').addEventListener('click', async () => {
       const order = await window.api.order.create({ personId, status: 'pending', amountCents: 0 });
       navigate('orderDetail', { orderId: order.id });
+    });
+
+    // Exports this client + every one of their orders (attachments
+    // included) to a passphrase-encrypted file -- see settings.js's
+    // "Import" card for the other half of this. Meant for handing a
+    // shared client off to someone else running their own instance of
+    // this app, not as a general backup mechanism.
+    container.querySelector('#export-client').addEventListener('click', async () => {
+      const passphrase = await promptForPassphrase({
+        title: 'Export client',
+        helpText:
+          "Choose a passphrase to protect this file, then share it with the recipient a different way than the file itself (e.g. tell them in person or a separate message) -- not your vault passphrase.",
+      });
+      if (!passphrase) return;
+
+      try {
+        const savedPath = await window.api.dataExchange.exportPerson(personId, passphrase);
+        if (savedPath) alert(`Saved to:\n${savedPath}`);
+      } catch (err) {
+        alert(`Failed to export: ${err.message}`);
+      }
     });
 
     // ---- Totals ---------------------------------------------------------

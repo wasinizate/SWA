@@ -11,6 +11,15 @@ longer-term ideas.
 
 ## Later / larger
 
+- **Whole-vault backup/restore.** Cross-instance export/import (Person +
+  Order handoff between two installs, e.g. two people sharing a client
+  roster) shipped -- see `src/main/dataExchange/`. Whole-vault backup/
+  restore is a natural, smaller follow-up that reuses the same bundle/
+  encrypt/decrypt plumbing (just "every table" instead of one person's
+  data), but is a different shape of operation: a destructive full-
+  replace import rather than a resolve-and-merge one, so it needs its
+  own clear, scary confirmation UI. Not built in the same round as the
+  handoff feature on purpose -- different risk profile, different UI.
 - **Budget targets** (a per-category monthly spending limit, with
   actual-vs-target shown on the Expenses tab). The expense ledger,
   slated income, and manual income-statement tracking shipped; this was

@@ -23,6 +23,7 @@ const { registerSearchIpc } = require('./ipc/searchIpc');
 const { registerExpenseIpc } = require('./ipc/expenseIpc');
 const { registerIncomeStatementIpc } = require('./ipc/incomeStatementIpc');
 const { registerIncomeStatementAttachmentIpc } = require('./ipc/incomeStatementAttachmentIpc');
+const { registerDataExchangeIpc } = require('./ipc/dataExchangeIpc');
 const { registerSettingsIpc } = require('./ipc/settingsIpc');
 const { registerUpdateIpc } = require('./ipc/updateIpc');
 const idleLock = require('./security/idleLock');
@@ -74,6 +75,7 @@ app.whenReady().then(() => {
   registerExpenseIpc();
   registerIncomeStatementIpc();
   registerIncomeStatementAttachmentIpc();
+  registerDataExchangeIpc();
   registerSettingsIpc();
   registerUpdateIpc();
 
