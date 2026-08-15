@@ -33,11 +33,25 @@ else on your machine first; the app never reaches out to anything on
 your system beyond your own filesystem.
 
 (Windows and macOS builds are available, see
-[Cross-platform status](#cross-platform-status). Neither is code-signed
-yet, so you'll see a first-run warning either way — Windows SmartScreen,
-or on macOS a Gatekeeper "app is damaged" prompt (right-click the app →
-Open to bypass it). Both are expected for an early release without a
-paid signing certificate, not a sign anything is wrong.)
+[Cross-platform status](#cross-platform-status). **On macOS, pick the
+right file**: `-arm64` is for Apple Silicon (M1/M2/M3 — almost every Mac
+sold since late 2020), `-x64` is for older Intel Macs. The wrong one
+will fail to open with no useful error at all.
+
+Neither build is code-signed yet, so you'll hit a first-run warning
+either way:
+- **Windows**: SmartScreen warns but lets you click through
+  ("More info" → "Run anyway").
+- **macOS**: since the app isn't signed at all (not even ad-hoc), recent
+  macOS versions usually block it outright with no override in the
+  normal right-click menu. Two ways around it: open **System Settings →
+  Privacy & Security**, scroll down, and click **"Open Anyway"** next to
+  the SWA mention (only appears after a first blocked attempt); or run
+  `xattr -cr /Applications/SWA.app` in Terminal to clear the quarantine
+  flag, then open it normally.
+
+Both are expected for an early release without a paid signing
+certificate, not a sign anything is wrong.)
 
 The first launch will ask you to set a passphrase — this encrypts the
 database file. **There is no password reset.** Write your passphrase down

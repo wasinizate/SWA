@@ -32,11 +32,21 @@ mac:
   # Intel Mac users with nothing. Two separate .dmg files (not a single
   # "universal2" one) since better-sqlite3-multiple-ciphers' native
   # binary has to be built per-architecture anyway.
+  #
+  # artifactName is explicit because electron-builder's own default
+  # omits the arch suffix for x64 specifically (a backwards-compat quirk
+  # from when x64 was the only Mac arch) while still appending "-arm64"
+  # for the other -- v0.2.2 shipped as the ambiguous "SWA-0.2.2.dmg"
+  # (x64) next to "SWA-0.2.2-arm64.dmg", which is exactly the kind of
+  # "which one do I download" confusion that caused a real install
+  # failure (an Apple Silicon Mac almost certainly grabbed the unlabeled
+  # x64 build). Every artifact name below always includes ${arch}.
   target:
     - target: dmg
       arch:
         - x64
         - arm64
+  artifactName: "${productName}-${version}-${arch}.${ext}"
   category: public.app-category.business
 linux:
   target: AppImage
