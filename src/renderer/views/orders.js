@@ -3,7 +3,8 @@
 // Click an order's "#" to open its own page (see orderDetail.js) for full
 // editing, or a client's name to jump to their profile instead.
 
-import { escapeHtml, formatMoney, previewText, ORDER_STATUSES, buildStatusOptions } from '../helpers.js';
+import { escapeHtml, formatMoney, previewText, ORDER_STATUSES, buildStatusOptions, loadingHtml } from '../helpers.js';
+import { showToast } from '../toast.js';
 
 export function renderOrdersView(container, { navigate }) {
   container.innerHTML = `
@@ -32,7 +33,7 @@ export function renderOrdersView(container, { navigate }) {
       <thead>
         <tr><th>#</th><th>Client</th><th>Date paid</th><th>Amount</th><th>Status</th><th>Payment</th><th>Description</th><th></th></tr>
       </thead>
-      <tbody id="rows"></tbody>
+      <tbody id="rows"><tr><td colspan="8" class="loading-state">Loading…</td></tr></tbody>
     </table>
   `;
 
@@ -45,7 +46,7 @@ export function renderOrdersView(container, { navigate }) {
   let allPeople = [];
 
   async function load() {
-    [allOrders, allPeople] = await Promise.all([window.api.order.listAll(), window.api.person.list()]);
+    [allOrders, allPeople] = await Promise.all([window.api.order.listAll(), window.api.person.listAll()]);
     renderNewOrderControls();
     render();
   }
@@ -94,7 +95,13 @@ export function renderOrdersView(container, { navigate }) {
     });
 
     if (orders.length === 0) {
-      rowsEl.innerHTML = '<tr><td colspan="8" class="muted">No orders match this filter.</td></tr>';
+      // Distinguish "nothing exists yet" from "your filter narrowed it to
+      // nothing" -- the latter shown even with zero orders and no active
+      // filter used to read as "your filter is wrong" on a fresh install.
+      rowsEl.innerHTML =
+        allOrders.length === 0
+          ? '<tr><td colspan="8" class="muted">No orders yet.</td></tr>'
+          : '<tr><td colspan="8" class="muted">No orders match this filter.</td></tr>';
       return;
     }
 
@@ -139,7 +146,7 @@ export function renderOrdersView(container, { navigate }) {
         btn.disabled = true;
         try {
           const savedPath = await window.api.order.exportPdf(Number(btn.dataset.exportPdf));
-          if (savedPath) alert(`Saved PDF to:\n${savedPath}`);
+          if (savedPath) showToast(`Saved PDF to: ${savedPath}`);
         } catch (err) {
           alert(`Failed to export PDF: ${err.message}`);
         } finally {

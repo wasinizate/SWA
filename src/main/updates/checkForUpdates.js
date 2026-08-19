@@ -56,4 +56,4 @@ async function checkForUpdates(currentVersion) {
   };
 }
 
-module.exports = { checkForUpdates, isNewerVersion, REPO };
+module.exports = { checkForUpdates, REPO };

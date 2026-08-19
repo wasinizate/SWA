@@ -1,5 +1,8 @@
 'use strict';
 
+// Repository layer for `calendar_events`. The only place that writes raw
+// SQL for it.
+
 const { getDb } = require('../connection');
 
 // listAll() fetches every event, no date-range windowing -- reasonable

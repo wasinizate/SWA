@@ -1,5 +1,8 @@
 'use strict';
 
+// Repository layer for `app_settings` (a generic key/value store -- see
+// 0001_init.sql's comment). The only place that writes raw SQL for it.
+
 const { getDb } = require('../connection');
 
 const DEFAULT_IDLE_TIMEOUT_SECONDS = 600; // 10 minutes

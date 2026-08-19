@@ -74,4 +74,4 @@ function escapeForPragma(value) {
   return String(value).replace(/'/g, "''");
 }
 
-module.exports = { open, close, getDb, isOpen, getDbPath, escapeForPragma };
+module.exports = { open, close, getDb, isOpen, escapeForPragma };

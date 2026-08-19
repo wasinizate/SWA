@@ -2,8 +2,9 @@
 // opt-in quick-unlock toggle, appearance (theme), and changing the vault
 // passphrase.
 
-import { escapeHtml, formatMoney, orderStatusLabel, previewText } from '../helpers.js';
+import { escapeHtml, formatMoney, orderStatusLabel, previewText, loadingHtml } from '../helpers.js';
 import { THEMES, applyTheme, getCurrentTheme } from '../theme.js';
+import { showToast } from '../toast.js';
 
 // Formats a single diff value for display in the Import card's
 // change list (renderImportPreview() below) -- money/status get their
@@ -26,7 +27,10 @@ function renderChangesList(changes) {
     .join('')}</ul>`;
 }
 
-export function renderSettingsView(container) {
+// Accepts { navigate } for signature consistency with every other view
+// (shell.js always passes it) -- not currently used here since this
+// page has no navigation of its own.
+export function renderSettingsView(container, { navigate } = {}) {
   container.innerHTML = `
     <h1>Settings</h1>
 
@@ -46,12 +50,7 @@ export function renderSettingsView(container) {
 
     <section class="card">
       <h2>Auto-lock</h2>
-      <label>
-        Lock after inactivity (minutes)
-        <input type="number" id="timeout-minutes" min="1" max="180" />
-      </label>
-      <button id="save-timeout" type="button">Save</button>
-      <p class="hint" id="timeout-saved" hidden>Saved.</p>
+      <div id="auto-lock-body">${loadingHtml()}</div>
     </section>
 
     <section class="card">
@@ -61,18 +60,7 @@ export function renderSettingsView(container) {
         date -- see the Calendar tab, where due dates appear
         automatically once set on an order.
       </p>
-      <label class="checkbox-label">
-        <input type="checkbox" id="order-reminder-enabled" /> Enable order due date reminders
-      </label>
-      <label>
-        Remind me this many days before the due date
-        <input type="number" id="order-reminder-days-before" min="0" max="30" />
-      </label>
-      <label class="checkbox-label">
-        <input type="checkbox" id="show-due-summary" /> Show a due-date summary when opening the app
-      </label>
-      <button id="save-order-reminder" type="button">Save</button>
-      <p class="hint" id="order-reminder-saved" hidden>Saved.</p>
+      <div id="order-reminder-body">${loadingHtml()}</div>
     </section>
 
     <section class="card">
@@ -97,14 +85,7 @@ export function renderSettingsView(container) {
         it means anyone who can act as your current OS user could unlock
         the vault too.
       </p>
-      <label class="checkbox-label">
-        <input type="checkbox" id="quick-unlock-toggle" /> Enable quick unlock
-      </label>
-      <div id="quick-unlock-confirm" hidden>
-        <label>Confirm current passphrase <input type="password" id="confirm-passphrase" /></label>
-        <button id="confirm-quick-unlock" type="button">Confirm</button>
-      </div>
-      <p class="error" id="qu-error" hidden></p>
+      <div id="quick-unlock-body">${loadingHtml()}</div>
     </section>
 
     <section class="card">
@@ -132,28 +113,116 @@ export function renderSettingsView(container) {
         <button type="submit">Change passphrase</button>
       </form>
       <p class="error" id="change-error" hidden></p>
-      <p class="hint" id="change-saved" hidden>Passphrase changed.</p>
     </section>
   `;
 
   init();
 
+  // Auto-lock/Order-reminders/Quick-unlock all show a loading placeholder
+  // (see the template above) until their data actually arrives, rather
+  // than painting default/unchecked values and visibly flipping them a
+  // moment later once init()'s Promise.all resolves -- each section's
+  // real controls are only ever built once its data is in hand.
   async function init() {
     const [timeoutSeconds, status, orderReminderConfig] = await Promise.all([
       window.api.vault.getIdleTimeoutSeconds(),
       window.api.vault.status(),
       window.api.settings.getOrderDueReminderConfig(),
     ]);
-    container.querySelector('#timeout-minutes').value = Math.round((timeoutSeconds ?? 600) / 60);
-    container.querySelector('#quick-unlock-toggle').checked = status.quickUnlockEnabled;
 
-    container.querySelector('#order-reminder-enabled').checked = orderReminderConfig?.enabled ?? true;
-    container.querySelector('#order-reminder-days-before').value = orderReminderConfig?.daysBefore ?? 1;
-    container.querySelector('#show-due-summary').checked = orderReminderConfig?.showSummaryOnOpen ?? true;
+    renderAutoLock(timeoutSeconds);
+    renderOrderReminder(orderReminderConfig);
+    renderQuickUnlock(status.quickUnlockEnabled);
 
     // Already applied to the page by shell.js at boot -- this just marks
     // which swatch matches what's currently live, no extra IPC call.
     markActiveSwatch(getCurrentTheme());
+  }
+
+  function renderAutoLock(timeoutSeconds) {
+    const body = container.querySelector('#auto-lock-body');
+    body.innerHTML = `
+      <label>
+        Lock after inactivity (minutes)
+        <input type="number" id="timeout-minutes" min="1" max="180" value="${Math.round((timeoutSeconds ?? 600) / 60)}" />
+      </label>
+      <button id="save-timeout" type="button">Save</button>
+    `;
+    body.querySelector('#save-timeout').addEventListener('click', async () => {
+      const minutes = Number(body.querySelector('#timeout-minutes').value) || 10;
+      await window.api.vault.setIdleTimeoutSeconds(minutes * 60);
+      showToast('Saved.');
+    });
+  }
+
+  function renderOrderReminder(orderReminderConfig) {
+    const body = container.querySelector('#order-reminder-body');
+    const enabled = orderReminderConfig?.enabled ?? true;
+    const daysBefore = orderReminderConfig?.daysBefore ?? 1;
+    const showSummaryOnOpen = orderReminderConfig?.showSummaryOnOpen ?? true;
+
+    body.innerHTML = `
+      <label class="checkbox-label">
+        <input type="checkbox" id="order-reminder-enabled" ${enabled ? 'checked' : ''} /> Enable order due date reminders
+      </label>
+      <label>
+        Remind me this many days before the due date
+        <input type="number" id="order-reminder-days-before" min="0" max="30" value="${daysBefore}" />
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="show-due-summary" ${showSummaryOnOpen ? 'checked' : ''} /> Show a due-date summary when opening the app
+      </label>
+      <button id="save-order-reminder" type="button">Save</button>
+    `;
+    body.querySelector('#save-order-reminder').addEventListener('click', async () => {
+      const isEnabled = body.querySelector('#order-reminder-enabled').checked;
+      const days = Number(body.querySelector('#order-reminder-days-before').value) || 0;
+      const showSummary = body.querySelector('#show-due-summary').checked;
+      await window.api.settings.setOrderDueReminderConfig(isEnabled, days, showSummary);
+      showToast('Saved.');
+    });
+  }
+
+  function renderQuickUnlock(quickUnlockEnabled) {
+    const body = container.querySelector('#quick-unlock-body');
+    body.innerHTML = `
+      <label class="checkbox-label">
+        <input type="checkbox" id="quick-unlock-toggle" ${quickUnlockEnabled ? 'checked' : ''} /> Enable quick unlock
+      </label>
+      <div id="quick-unlock-confirm" hidden>
+        <label>Confirm current passphrase <input type="password" id="confirm-passphrase" /></label>
+        <button id="confirm-quick-unlock" type="button">Confirm</button>
+      </div>
+      <p class="error" id="qu-error" hidden></p>
+    `;
+
+    const toggle = body.querySelector('#quick-unlock-toggle');
+    const confirmBox = body.querySelector('#quick-unlock-confirm');
+    const quError = body.querySelector('#qu-error');
+
+    toggle.addEventListener('change', async () => {
+      quError.hidden = true;
+      if (toggle.checked) {
+        // We need the plaintext passphrase once more to wrap it with
+        // safeStorage -- it's never persisted anywhere until this point.
+        confirmBox.hidden = false;
+      } else {
+        await window.api.vault.setQuickUnlock(false);
+        confirmBox.hidden = true;
+      }
+    });
+
+    body.querySelector('#confirm-quick-unlock').addEventListener('click', async () => {
+      const pass = body.querySelector('#confirm-passphrase').value;
+      try {
+        await window.api.vault.setQuickUnlock(true, pass);
+        confirmBox.hidden = true;
+      } catch (err) {
+        quError.textContent = err.message;
+        quError.hidden = false;
+        toggle.checked = false;
+      }
+    });
   }
 
   function markActiveSwatch(themeId) {
@@ -169,20 +238,6 @@ export function renderSettingsView(container) {
       markActiveSwatch(themeId);
       await window.api.settings.setTheme(themeId);
     });
-  });
-
-  container.querySelector('#save-timeout').addEventListener('click', async () => {
-    const minutes = Number(container.querySelector('#timeout-minutes').value) || 10;
-    await window.api.vault.setIdleTimeoutSeconds(minutes * 60);
-    flash(container.querySelector('#timeout-saved'));
-  });
-
-  container.querySelector('#save-order-reminder').addEventListener('click', async () => {
-    const enabled = container.querySelector('#order-reminder-enabled').checked;
-    const daysBefore = Number(container.querySelector('#order-reminder-days-before').value) || 0;
-    const showSummaryOnOpen = container.querySelector('#show-due-summary').checked;
-    await window.api.settings.setOrderDueReminderConfig(enabled, daysBefore, showSummaryOnOpen);
-    flash(container.querySelector('#order-reminder-saved'));
   });
 
   container.querySelector('#check-updates').addEventListener('click', async () => {
@@ -209,34 +264,6 @@ export function renderSettingsView(container) {
     }
 
     btn.disabled = false;
-  });
-
-  const toggle = container.querySelector('#quick-unlock-toggle');
-  const confirmBox = container.querySelector('#quick-unlock-confirm');
-  const quError = container.querySelector('#qu-error');
-
-  toggle.addEventListener('change', async () => {
-    quError.hidden = true;
-    if (toggle.checked) {
-      // We need the plaintext passphrase once more to wrap it with
-      // safeStorage -- it's never persisted anywhere until this point.
-      confirmBox.hidden = false;
-    } else {
-      await window.api.vault.setQuickUnlock(false);
-      confirmBox.hidden = true;
-    }
-  });
-
-  container.querySelector('#confirm-quick-unlock').addEventListener('click', async () => {
-    const pass = container.querySelector('#confirm-passphrase').value;
-    try {
-      await window.api.vault.setQuickUnlock(true, pass);
-      confirmBox.hidden = true;
-    } catch (err) {
-      quError.textContent = err.message;
-      quError.hidden = false;
-      toggle.checked = false;
-    }
   });
 
   // ---- Import (cross-instance export/import, see dataExchangeIpc.js) --
@@ -375,17 +402,10 @@ export function renderSettingsView(container) {
     try {
       await window.api.vault.changePassphrase(next);
       container.querySelector('#change-form').reset();
-      flash(container.querySelector('#change-saved'));
+      showToast('Passphrase changed.');
     } catch (err) {
       errorEl.textContent = err.message;
       errorEl.hidden = false;
     }
   });
-
-  function flash(el) {
-    el.hidden = false;
-    setTimeout(() => {
-      el.hidden = true;
-    }, 1500);
-  }
 }

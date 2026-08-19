@@ -15,7 +15,7 @@
 const crypto = require('crypto');
 const { getDb } = require('../connection');
 
-function list() {
+function listAll() {
   return getDb().prepare('SELECT * FROM persons ORDER BY private_label COLLATE NOCASE').all();
 }
 
@@ -86,4 +86,4 @@ function setExternalId(id, externalId) {
   getDb().prepare('UPDATE persons SET external_id = ? WHERE id = ?').run(externalId, id);
 }
 
-module.exports = { list, get, create, update, remove, getByExternalId, ensureExternalId, setExternalId };
+module.exports = { listAll, get, create, update, remove, getByExternalId, ensureExternalId, setExternalId };

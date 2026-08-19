@@ -1,14 +1,14 @@
-// Global search across Clients (People) and Orders. A dedicated nav item
-// + page rather than an always-visible box -- the app has no persistent
-// header chrome today, so this follows the same page-based pattern as
-// every other feature (Clients/Orders/Calendar/Settings).
+// The full Search results page. The primary way to search is the
+// always-visible sidebar quick-search (shell.js), which links here via
+// its "See all N results" row (or a double-click on the search box) for
+// the complete list -- this page isn't reachable from its own nav item.
 //
 // Results link straight to the existing Person/Order detail pages (not a
 // calendar deep link) -- see ROADMAP.md for why.
 
-import { escapeHtml, formatMoney, previewText, orderStatusLabel } from '../helpers.js';
+import { escapeHtml, formatMoney, previewText, orderStatusLabel, SEARCH_MIN_QUERY_LENGTH } from '../helpers.js';
 
-const MIN_QUERY_LENGTH = 2; // must match search.js's MIN_QUERY_LENGTH on the main side
+const MIN_QUERY_LENGTH = SEARCH_MIN_QUERY_LENGTH;
 const DEBOUNCE_MS = 200;
 
 export function renderSearchView(container, { navigate, query: initialQuery }) {

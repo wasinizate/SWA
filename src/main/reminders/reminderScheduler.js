@@ -24,21 +24,9 @@ function todayDateString() {
 }
 
 function showNotification(title, body, getMainWindow) {
-  // TEMPORARY diagnostics while tracking down a report of no popup
-  // appearing -- these print straight to this process's own terminal
-  // (unlike renderer console.log, main-process console.log needs no
-  // special forwarding). Safe to remove once confirmed working.
-  console.log(`[reminder] Notification.isSupported() = ${Notification.isSupported()}`);
-  console.log(`[reminder] attempting to show: "${title}" -- "${body}"`);
-
-  if (!Notification.isSupported()) {
-    console.log('[reminder] Skipped: Electron/the OS reports notifications are not supported here.');
-    return;
-  }
+  if (!Notification.isSupported()) return;
 
   const notification = new Notification({ title, body });
-  notification.on('show', () => console.log('[reminder] "show" event fired -- OS accepted the notification.'));
-  notification.on('failed', (_event, error) => console.log(`[reminder] "failed" event fired: ${error}`));
   notification.on('click', () => {
     const win = getMainWindow();
     if (win && !win.isDestroyed()) {
@@ -51,7 +39,6 @@ function showNotification(title, body, getMainWindow) {
 
 function checkCalendarEventReminders(getMainWindow) {
   const pending = calendarEventRepo.listPendingReminders();
-  console.log(`[reminder] poll: ${pending.length} calendar event(s) with a reminder still pending`);
   const now = Date.now();
 
   for (const event of pending) {

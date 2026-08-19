@@ -4,20 +4,13 @@
 // (personDetail.js creates a blank one and navigates straight here), so
 // unlike the old inline form, there's no create/edit mode switch to track.
 
-import {
-  escapeHtml,
-  formatMoney,
-  formatBytes,
-  parseMoneyToCents,
-  PAYMENT_METHOD_PRESETS,
-  buildStatusOptions,
-} from '../helpers.js';
+import { escapeHtml, formatMoney, parseMoneyToCents, PAYMENT_METHOD_PRESETS, buildStatusOptions, loadingHtml } from '../helpers.js';
 import { promptForPassphrase } from '../exportPassphrasePrompt.js';
-
-const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024; // keep in sync with orderAttachmentIpc.js's server-side cap
+import { createAttachmentGrid } from '../attachmentGrid.js';
+import { showToast } from '../toast.js';
 
 export function renderOrderDetailView(container, { navigate, orderId }) {
-  container.innerHTML = '<p>Loading...</p>';
+  container.innerHTML = loadingHtml();
   load();
 
   async function load() {
@@ -81,7 +74,6 @@ export function renderOrderDetailView(container, { navigate, orderId }) {
             <button type="button" class="btn-secondary" id="order-export-data">Export order</button>
             <button type="button" class="danger" id="order-delete">Delete order</button>
           </div>
-          <p class="hint" id="save-confirmation" hidden>Saved.</p>
         </form>
       </section>
 
@@ -144,9 +136,7 @@ export function renderOrderDetailView(container, { navigate, orderId }) {
         feedbackNotes: container.querySelector('#order-feedback-notes').value,
         wouldRepeat: container.querySelector('#order-would-repeat').value,
       });
-      const confirmation = container.querySelector('#save-confirmation');
-      confirmation.hidden = false;
-      setTimeout(() => (confirmation.hidden = true), 1500);
+      showToast('Saved.');
     });
 
     container.querySelector('#order-export-pdf').addEventListener('click', async (event) => {
@@ -154,7 +144,7 @@ export function renderOrderDetailView(container, { navigate, orderId }) {
       btn.disabled = true;
       try {
         const savedPath = await window.api.order.exportPdf(orderId);
-        if (savedPath) alert(`Saved PDF to:\n${savedPath}`);
+        if (savedPath) showToast(`Saved PDF to: ${savedPath}`);
       } catch (err) {
         alert(`Failed to export PDF: ${err.message}`);
       } finally {
@@ -177,7 +167,7 @@ export function renderOrderDetailView(container, { navigate, orderId }) {
 
       try {
         const savedPath = await window.api.dataExchange.exportOrder(orderId, order.person_id, passphrase);
-        if (savedPath) alert(`Saved to:\n${savedPath}`);
+        if (savedPath) showToast(`Saved to: ${savedPath}`);
       } catch (err) {
         alert(`Failed to export: ${err.message}`);
       }
@@ -289,123 +279,18 @@ export function renderOrderDetailView(container, { navigate, orderId }) {
 
     // ---- Attachments -----------------------------------------------------
 
-    let attachmentObjectUrls = [];
-
-    function revokeAttachmentObjectUrls() {
-      attachmentObjectUrls.forEach((url) => URL.revokeObjectURL(url));
-      attachmentObjectUrls = [];
-    }
-
-    function openLightbox(url, altText) {
-      const overlay = document.createElement('div');
-      overlay.className = 'lightbox';
-      overlay.innerHTML = `<button type="button" class="btn-secondary lightbox-close">Close</button><img src="${url}" alt="${escapeHtml(altText)}" />`;
-
-      function close() {
-        overlay.remove();
-        document.removeEventListener('keydown', onKeydown);
-      }
-      function onKeydown(event) {
-        if (event.key === 'Escape') close();
-      }
-
-      overlay.addEventListener('click', (event) => {
-        if (event.target === overlay || event.target.classList.contains('lightbox-close')) close();
-      });
-      document.addEventListener('keydown', onKeydown);
-
-      container.appendChild(overlay);
-    }
-
-    async function refreshAttachments() {
-      revokeAttachmentObjectUrls();
-      const attachments = await window.api.orderAttachment.listByOrder(orderId);
-      const grid = container.querySelector('#attachment-grid');
-
-      if (attachments.length === 0) {
-        grid.innerHTML = '<p class="muted">No attachments yet.</p>';
-        return;
-      }
-
-      grid.innerHTML = attachments
-        .map(
-          (a) => `
-          <div class="attachment-item">
-            <div data-attachment-preview="${a.id}">
-              ${a.mime_type.startsWith('image/') ? '' : '<div class="attachment-file">📎</div>'}
-            </div>
-            <div class="attachment-name">${escapeHtml(a.file_name)}</div>
-            <div class="attachment-meta">${formatBytes(a.byte_size)}</div>
-            <div class="attachment-actions">
-              <button type="button" class="btn-secondary btn-sm" data-save-attachment="${a.id}">Save</button>
-              <button type="button" class="danger btn-sm" data-delete-attachment="${a.id}">Delete</button>
-            </div>
-          </div>`
-        )
-        .join('');
-
-      // The metadata list above deliberately excludes file bytes to stay
-      // cheap -- fetch the actual data for image thumbnails only, one
-      // attachment at a time.
-      for (const a of attachments) {
-        if (!a.mime_type.startsWith('image/')) continue;
-        const full = await window.api.orderAttachment.get(a.id);
-        const blob = new Blob([full.data], { type: full.mime_type });
-        const url = URL.createObjectURL(blob);
-        attachmentObjectUrls.push(url);
-        const previewEl = grid.querySelector(`[data-attachment-preview="${a.id}"]`);
-        if (previewEl) {
-          previewEl.innerHTML = `<img class="attachment-thumb" src="${url}" alt="${escapeHtml(a.file_name)}" />`;
-          previewEl.querySelector('img').addEventListener('click', () => openLightbox(url, a.file_name));
-        }
-      }
-
-      grid.querySelectorAll('[data-save-attachment]').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          try {
-            const savedPath = await window.api.orderAttachment.saveToDisk(Number(btn.dataset.saveAttachment));
-            if (savedPath) alert(`Saved to:\n${savedPath}`);
-          } catch (err) {
-            alert(`Failed to save: ${err.message}`);
-          }
-        });
-      });
-
-      grid.querySelectorAll('[data-delete-attachment]').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          if (!confirm('Delete this attachment?')) return;
-          await window.api.orderAttachment.delete(Number(btn.dataset.deleteAttachment));
-          await refreshAttachments();
-        });
-      });
-    }
-
-    container.querySelector('#attachment-input').addEventListener('change', async (event) => {
-      const files = Array.from(event.target.files || []);
-      event.target.value = ''; // allow re-selecting the same file(s) later
-      if (files.length === 0) return;
-
-      for (const file of files) {
-        if (file.size > MAX_ATTACHMENT_BYTES) {
-          alert(`"${file.name}" is too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). The limit is 20MB per file.`);
-          continue;
-        }
-        const buffer = await file.arrayBuffer();
-        try {
-          await window.api.orderAttachment.add({
-            orderId,
-            fileName: file.name,
-            mimeType: file.type || 'application/octet-stream',
-            data: new Uint8Array(buffer),
-          });
-        } catch (err) {
-          alert(`Failed to attach "${file.name}": ${err.message}`);
-        }
-      }
-
-      await refreshAttachments();
+    const attachmentGrid = createAttachmentGrid({
+      gridEl: container.querySelector('#attachment-grid'),
+      inputEl: container.querySelector('#attachment-input'),
+      api: {
+        list: () => window.api.orderAttachment.listByOrder(orderId),
+        get: (id) => window.api.orderAttachment.get(id),
+        add: ({ fileName, mimeType, data }) => window.api.orderAttachment.add({ orderId, fileName, mimeType, data }),
+        saveToDisk: (id) => window.api.orderAttachment.saveToDisk(id),
+        remove: (id) => window.api.orderAttachment.delete(id),
+      },
     });
 
-    await refreshAttachments();
+    await attachmentGrid.refresh();
   }
 }

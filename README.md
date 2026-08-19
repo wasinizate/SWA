@@ -50,6 +50,9 @@ either way:
   `xattr -cr /Applications/SWA.app` in Terminal to clear the quarantine
   flag, then open it normally.
 
+Both are expected for an early release without a paid signing
+certificate, not a sign anything is wrong.)
+
 The first launch will ask you to set a passphrase — this encrypts the
 database file. **There is no password reset.** Write your passphrase down
 somewhere safe outside the app.
@@ -57,13 +60,6 @@ somewhere safe outside the app.
 <img width="1331" height="845" alt="Screenshot 2026-08-15 210835" src="https://github.com/user-attachments/assets/7d0400f2-f917-4278-ace7-c8f5147df1bf" />
 <img width="1086" height="743" alt="Screenshot 2026-08-15 210815" src="https://github.com/user-attachments/assets/a1e9aabe-0d0f-4dae-bef7-e5e6f6aa81c7" />
 <img width="1084" height="741" alt="Screenshot 2026-08-15 210748" src="https://github.com/user-attachments/assets/f76eb2f3-5cb3-4d95-819c-cf0fc445c93d" />
-
-
-
-
-
-
-
 
 ## Building from source (for development/contributing)
 

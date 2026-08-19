@@ -33,7 +33,7 @@ contextBridge.exposeInMainWorld('api', {
     },
   },
   person: {
-    list: () => ipcRenderer.invoke('person:list'),
+    listAll: () => ipcRenderer.invoke('person:listAll'),
     get: (id) => ipcRenderer.invoke('person:get', id),
     create: (data) => ipcRenderer.invoke('person:create', data),
     update: (id, data) => ipcRenderer.invoke('person:update', id, data),

@@ -1,5 +1,8 @@
 'use strict';
 
+// Repository layer for `platform_accounts`. The only place that writes
+// raw SQL for it.
+
 const { getDb } = require('../connection');
 
 function listByPerson(personId) {

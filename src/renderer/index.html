@@ -6,8 +6,9 @@
     Strict CSP: only same-origin (local file) scripts/styles may run, and
     inline <script> tags are blocked entirely. img-src additionally allows
     blob: for attachment thumbnails/lightbox, which are rendered from
-    in-memory Blob objects (see views/personDetail.js) rather than fetched
-    from anywhere -- still fully local, never a network request.
+    in-memory Blob objects (see views/orderDetail.js and views/expenses.js,
+    both via renderer/attachmentGrid.js) rather than fetched from anywhere
+    -- still fully local, never a network request.
   -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:;" />
   <title>SWA</title>

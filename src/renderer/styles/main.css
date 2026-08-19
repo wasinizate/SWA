@@ -14,6 +14,25 @@
   --danger: #e5484d;
   --warning: #f59e0b;
   --radius: 8px;
+  /* Text color for content sitting directly on --accent (buttons, active
+     nav/tab states). Computed, not guessed: white-on-accent fails WCAG AA
+     (4.5:1) on every one of this app's 4 themes (2.5-3.3:1, all fairly
+     bright/saturated accent colors) while this near-black clears AA
+     comfortably on all of them (5.4-7.1:1) -- one universal value, no
+     per-theme override needed (same as --radius above). */
+  --on-accent: #17181c;
+  /* Dark themes share this; Sakura (the one light theme) overrides it
+     below with something that doesn't look like a hole punched in its
+     otherwise soft palette. */
+  --shadow: rgba(0, 0, 0, 0.45);
+  /* Full-screen dimming scrims (.lightbox/.modal-overlay) -- a different
+     job than --shadow above (obscuring what's behind, not casting a
+     shadow), so kept as its own variable and deliberately NOT themed
+     per-Sakura the way --shadow is: a backdrop conventionally stays dark
+     regardless of the foreground theme, the same way it would on a
+     photo-viewer or dialog in any app. */
+  --backdrop: rgba(0, 0, 0, 0.6);
+  --backdrop-heavy: rgba(0, 0, 0, 0.85);
 }
 
 /* OnlyFans: built from their actual published brand colors, not an
@@ -70,6 +89,10 @@
   --accent: #e85d8a;
   --danger: #d1495b;
   --warning: #d98324;
+  /* Soft warm-pink shadow instead of the dark themes' flat black -- a
+     harsh rgba(0,0,0,.45) overlay reads out of place next to this
+     theme's otherwise soft, light palette. */
+  --shadow: rgba(120, 60, 90, 0.18);
 }
 
 * {
@@ -82,6 +105,40 @@ body {
   background: var(--bg);
   color: var(--text);
   font-size: 15px;
+}
+
+/* Keyboard-only focus ring, themed via --accent. :focus-visible (unlike
+   plain :focus) only fires for keyboard navigation, not mouse clicks --
+   important here since the primary nav is entirely <button>s, which had
+   zero focus styling before this and fell back to nothing usable. */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Themed scrollbars (Chromium-only -- fine, Electron always is) so they
+   don't default to a jarring light-gray against the three dark themes. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 #app {
@@ -184,7 +241,7 @@ textarea {
 
 button {
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   border: none;
   border-radius: 6px;
   padding: 0.45rem 0.9rem;
@@ -242,6 +299,14 @@ button.link-button {
   color: var(--accent);
   padding: 0;
   text-decoration: underline;
+  transition: opacity 0.1s ease;
+}
+
+/* button:hover's filter:brightness(1.1) (see above) is essentially
+   invisible on a text-only element with no background -- an opacity dip
+   actually reads as a hover state. */
+button.link-button:hover {
+  opacity: 0.75;
 }
 
 .error {
@@ -274,6 +339,34 @@ button.link-button {
 
 .muted {
   color: var(--text-muted);
+}
+
+/* Shared initial-load placeholder (helpers.js's loadingHtml()) -- one
+   consistent treatment instead of each view either showing unstyled
+   "Loading..." text or nothing at all while its first data fetch is in
+   flight. */
+.loading-state {
+  color: var(--text-muted);
+  padding: 2rem 0;
+  text-align: center;
+  font-size: 0.9rem;
+  animation: loading-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes loading-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-state {
+    animation: none;
+  }
 }
 
 hr {
@@ -322,6 +415,16 @@ hr {
   letter-spacing: 0.02em;
 }
 
+/* Table rows are the primary click target in most views (open a client/
+   order/etc.) -- a hover tint makes that affordance obvious. */
+.data-table tbody tr {
+  transition: background-color 0.1s ease;
+}
+
+.data-table tbody tr:hover {
+  background: var(--surface-alt);
+}
+
 .shell {
   display: flex;
   min-height: 100vh;
@@ -355,6 +458,12 @@ hr {
   margin-top: 0;
 }
 
+/* Shown/hidden via the .open class (shell.js), not the `hidden`
+   attribute -- `hidden` forces display:none, which can't be animated
+   across (no intermediate state to transition through). opacity +
+   pointer-events gets the same "not interactable" behavior while
+   staying transitionable; aria-hidden is toggled alongside in JS for
+   the same reason `hidden` provided that on its own before. */
 .sidebar-search-dropdown {
   position: absolute;
   top: calc(100% + 0.3rem);
@@ -365,9 +474,19 @@ hr {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 8px 24px var(--shadow);
   padding: 0.4rem;
   z-index: 50;
+  opacity: 0;
+  transform: translateY(-4px);
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.sidebar-search-dropdown.open {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
 }
 
 .sidebar-search-dropdown .muted {
@@ -428,6 +547,7 @@ hr {
   padding: 0.45rem 0.7rem;
   border-radius: 6px;
   font-size: 0.9rem;
+  transition: background-color 0.1s ease, color 0.1s ease;
 }
 
 .nav-link:hover:not(:disabled) {
@@ -436,12 +556,17 @@ hr {
 
 .nav-link.active {
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
 }
 
 .lock-button {
   background: var(--surface-alt);
   border: 1px solid var(--border);
+}
+
+.lock-button:hover {
+  background: var(--border);
+  filter: none;
 }
 
 /* Capping the reading width is the single biggest fix for the "wide dead
@@ -489,34 +614,32 @@ hr {
 /* Truncated description shown in table rows -- the full text is always
    available by opening the order for editing (or via PDF export). */
 .description-preview {
-  max-width: 220px;
+  max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text-muted);
 }
 
-/* Collapsible sub-panels (Price calculator / Feedback) inside the order
-   form. These sit closed most of the time, so a light border rather than
-   a filled background keeps them from reading as "yet another box"
-   stacked on the page when they are open. */
-.calculator,
-.feedback {
+/* Collapsible price-calculator sub-panel inside the order form. Sits
+   closed most of the time, so a light border rather than a filled
+   background keeps it from reading as "yet another box" stacked on the
+   page when it's open. (Feedback used to share this rule too, back when
+   it was also a <details> -- it's a plain .card now, see orderDetail.js.) */
+.calculator {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 0.75rem 1rem;
   margin: 0.75rem 0;
 }
 
-.calculator summary,
-.feedback summary {
+.calculator summary {
   cursor: pointer;
   font-weight: 600;
   font-size: 0.9rem;
 }
 
-.calculator[open] summary,
-.feedback[open] summary {
+.calculator[open] summary {
   margin-bottom: 0.6rem;
 }
 
@@ -526,10 +649,6 @@ hr {
 
 .calc-total-line {
   margin: 0.6rem 0;
-}
-
-.feedback label {
-  margin-top: 0.6rem;
 }
 
 /* Client totals: a plain divider rather than a nested card, since it's
@@ -561,11 +680,17 @@ hr {
   color: var(--text);
   padding: 0.3rem 0.7rem;
   font-size: 0.8rem;
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+
+.totals-tab:hover:not(.active) {
+  background: var(--border);
+  filter: none;
 }
 
 .totals-tab.active {
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 
@@ -643,25 +768,21 @@ hr {
   font-size: 0.8rem;
 }
 
-/* Order # shown above the form, e.g. "Editing Order #42". */
-.order-heading {
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  margin-bottom: 0.5rem;
-}
-
-.attachments {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 0.75rem 1rem;
-  margin: 0.75rem 0;
-}
-
 .attachment-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
   margin-top: 0.75rem;
+}
+
+/* Expandable attachment panel embedded inline under an income statement
+   row (expenses.js) -- toggled via the `hidden` attribute, not this
+   class; this just gives the expanded panel some visual weight so it
+   doesn't look like a stray, unstyled table row. */
+.statement-attachments-row td {
+  background: var(--surface-alt);
+  padding: 0.75rem 1rem;
+  border-radius: 0 0 var(--radius) var(--radius);
 }
 
 .attachment-item {
@@ -712,16 +833,36 @@ hr {
   margin-top: 0.3rem;
 }
 
-/* Full-screen image preview, opened by clicking a thumbnail. */
+/* Full-screen image preview, opened by clicking a thumbnail. Fades in on
+   mount -- both this and .modal-overlay below are freshly created and
+   appended each time they open, so a plain mount-time animation (no
+   class toggle needed) is enough. */
 .lightbox {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.85);
+  background: var(--backdrop-heavy);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
   padding: 2rem;
+  animation: overlay-fade-in 0.15s ease;
+}
+
+@keyframes overlay-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lightbox,
+  .modal-overlay {
+    animation: none;
+  }
 }
 
 .lightbox img {
@@ -742,12 +883,13 @@ hr {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--backdrop);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
   padding: 2rem;
+  animation: overlay-fade-in 0.15s ease;
 }
 
 .modal {
@@ -763,6 +905,56 @@ hr {
 
 .modal h2 {
   margin-top: 0;
+}
+
+/* Non-blocking toast notifications (toast.js) -- replaces alert() for
+   routine success messages. Bottom-corner stack, fades in/out; a manual
+   dismiss (x) since some messages (a saved file's path) are worth
+   actually reading rather than glancing at before the auto-hide timer
+   clears them. */
+.toast-container {
+  position: fixed;
+  bottom: 1.25rem;
+  right: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  z-index: 2000;
+  max-width: 360px;
+}
+
+.toast {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.7rem 2.2rem 0.7rem 0.9rem;
+  box-shadow: 0 4px 16px var(--shadow);
+  font-size: 0.85rem;
+  position: relative;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  word-break: break-word;
+}
+
+.toast-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast-close {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.4rem;
+  background: none;
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.3rem;
+}
+
+.toast-close:hover {
+  color: var(--text);
 }
 
 /* Buckets in the "due date digest" modal (dueDateSummary.js). */
@@ -839,6 +1031,7 @@ hr {
   border: 2px solid transparent;
   border-radius: var(--radius);
   padding: 0.5rem 0.4rem;
+  transition: background-color 0.1s ease, border-color 0.1s ease;
 }
 
 .theme-swatch:hover {

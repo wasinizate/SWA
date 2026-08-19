@@ -1,5 +1,8 @@
 'use strict';
 
+// Repository layer for `orders`. The only place that writes raw SQL for
+// it.
+
 const crypto = require('crypto');
 const { getDb } = require('../connection');
 

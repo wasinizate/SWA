@@ -29,14 +29,7 @@ function update(id, fields) {
   const existing = get(id);
   if (!existing) throw new Error(`Expense ${id} not found.`);
 
-  const merged = {
-    date: fields.date !== undefined ? fields.date : existing.date,
-    amountCents: fields.amountCents !== undefined ? fields.amountCents : existing.amount_cents,
-    currency: fields.currency !== undefined ? fields.currency : existing.currency,
-    category: fields.category !== undefined ? fields.category : existing.category,
-    description: fields.description !== undefined ? fields.description : existing.description,
-  };
-
+  const merged = { ...toCamel(existing), ...fields };
   getDb()
     .prepare(
       `UPDATE expenses SET date = ?, amount_cents = ?, currency = ?, category = ?, description = ?
@@ -48,6 +41,20 @@ function update(id, fields) {
 
 function remove(id) {
   getDb().prepare('DELETE FROM expenses WHERE id = ?').run(id);
+}
+
+// Converts a raw (snake_case) DB row into the camelCase shape used by
+// update()'s inputs, so it can merge a partial patch onto the existing
+// row without repeating every field name twice -- same pattern as
+// order.js's toCamel().
+function toCamel(row) {
+  return {
+    date: row.date,
+    amountCents: row.amount_cents,
+    currency: row.currency,
+    category: row.category,
+    description: row.description,
+  };
 }
 
 // Aggregated totals for the Expenses page's summary card -- same

@@ -161,3 +161,19 @@ export function previewText(text, maxLength = 80) {
   if (collapsed.length <= maxLength) return collapsed;
   return `${collapsed.slice(0, maxLength - 1)}…`;
 }
+
+// Shared between the sidebar quick-search (shell.js) and the full
+// results page (search.js) -- both need to agree on when a query is
+// long enough to actually fire, rather than each hardcoding its own
+// copy. The main-process search repo has its own separate floor
+// (src/main/db/repositories/search.js) -- that one's the real
+// server-side minimum regardless of what the renderer sends, so it's
+// intentionally not shared across the process boundary.
+export const SEARCH_MIN_QUERY_LENGTH = 2;
+
+// Small pulsing placeholder shown while a view's initial data is still
+// loading (see .loading-state in main.css) -- one shared treatment
+// instead of each view rolling its own "Loading..." text.
+export function loadingHtml(label = 'Loading…') {
+  return `<p class="loading-state">${escapeHtml(label)}</p>`;
+}

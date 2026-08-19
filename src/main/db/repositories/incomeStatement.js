@@ -31,17 +31,7 @@ function update(id, fields) {
   const existing = get(id);
   if (!existing) throw new Error(`Income statement ${id} not found.`);
 
-  const merged = {
-    periodStart: fields.periodStart !== undefined ? fields.periodStart : existing.period_start,
-    periodEnd: fields.periodEnd !== undefined ? fields.periodEnd : existing.period_end,
-    platform: fields.platform !== undefined ? fields.platform : existing.platform,
-    currency: fields.currency !== undefined ? fields.currency : existing.currency,
-    grossCents: fields.grossCents !== undefined ? fields.grossCents : existing.gross_cents,
-    feesCents: fields.feesCents !== undefined ? fields.feesCents : existing.fees_cents,
-    netCents: fields.netCents !== undefined ? fields.netCents : existing.net_cents,
-    notes: fields.notes !== undefined ? fields.notes : existing.notes,
-  };
-
+  const merged = { ...toCamel(existing), ...fields };
   getDb()
     .prepare(
       `UPDATE income_statements SET
@@ -66,6 +56,23 @@ function remove(id) {
   // ON DELETE CASCADE (declared in the schema) takes care of that
   // statement's attachments automatically.
   getDb().prepare('DELETE FROM income_statements WHERE id = ?').run(id);
+}
+
+// Converts a raw (snake_case) DB row into the camelCase shape used by
+// update()'s inputs, so it can merge a partial patch onto the existing
+// row without repeating every field name twice -- same pattern as
+// order.js's toCamel().
+function toCamel(row) {
+  return {
+    periodStart: row.period_start,
+    periodEnd: row.period_end,
+    platform: row.platform,
+    currency: row.currency,
+    grossCents: row.gross_cents,
+    feesCents: row.fees_cents,
+    netCents: row.net_cents,
+    notes: row.notes,
+  };
 }
 
 // Aggregated totals for the Expenses page's summary card -- net_cents is

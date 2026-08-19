@@ -10,11 +10,11 @@ import { renderSearchView } from './search.js';
 import { renderExpensesView } from './expenses.js';
 import { renderSettingsView } from './settings.js';
 import { maybeShowDueDateSummary } from '../dueDateSummary.js';
-import { escapeHtml, previewText } from '../helpers.js';
+import { escapeHtml, previewText, SEARCH_MIN_QUERY_LENGTH } from '../helpers.js';
 import { applyTheme } from '../theme.js';
 
 const SIDEBAR_SEARCH_DEBOUNCE_MS = 200;
-const SIDEBAR_SEARCH_MIN_LENGTH = 2;
+const SIDEBAR_SEARCH_MIN_LENGTH = SEARCH_MIN_QUERY_LENGTH;
 const SIDEBAR_SEARCH_PREVIEW_LIMIT = 5;
 
 // Module-scoped (not per-call) so the single pair of document-level
@@ -33,7 +33,7 @@ export function renderShell(root, { onLocked }) {
         <div class="brand">SWA</div>
         <div class="sidebar-search">
           <input type="search" id="sidebar-search-input" placeholder="Search…" autocomplete="off" />
-          <div class="sidebar-search-dropdown" id="sidebar-search-dropdown" hidden></div>
+          <div class="sidebar-search-dropdown" id="sidebar-search-dropdown" aria-hidden="true"></div>
         </div>
         <ul class="nav-list">
           <li><button class="nav-link" data-view="people">Clients</button></li>
@@ -102,8 +102,18 @@ function setUpSidebarSearch(root, navigate) {
   let debounceHandle = null;
   let requestId = 0;
 
+  // .open (not the `hidden` attribute) so the dropdown can actually
+  // transition open/closed -- see main.css's .sidebar-search-dropdown
+  // comment for why. aria-hidden mirrors it for the same reason `hidden`
+  // provided that on its own before.
+  function showDropdown() {
+    dropdown.classList.add('open');
+    dropdown.setAttribute('aria-hidden', 'false');
+  }
+
   function hideDropdown() {
-    dropdown.hidden = true;
+    dropdown.classList.remove('open');
+    dropdown.setAttribute('aria-hidden', 'true');
   }
 
   function openResult(viewName, params) {
@@ -115,7 +125,7 @@ function setUpSidebarSearch(root, navigate) {
   function renderResults(query, people, orders) {
     if (people.length === 0 && orders.length === 0) {
       dropdown.innerHTML = '<p class="muted">No matches.</p>';
-      dropdown.hidden = false;
+      showDropdown();
       return;
     }
 
@@ -143,7 +153,7 @@ function setUpSidebarSearch(root, navigate) {
       ${orders.length > 0 ? `<div class="sidebar-search-section-title">Orders</div>${orderRows}` : ''}
       ${isCapped ? `<button type="button" class="sidebar-search-result sidebar-search-see-all" data-see-all>See all ${total} results</button>` : ''}
     `;
-    dropdown.hidden = false;
+    showDropdown();
 
     dropdown.querySelectorAll('[data-open-person]').forEach((btn) => {
       btn.addEventListener('click', () => openResult('personDetail', { personId: Number(btn.dataset.openPerson) }));
@@ -175,7 +185,7 @@ function setUpSidebarSearch(root, navigate) {
   });
 
   input.addEventListener('focus', () => {
-    if (input.value.trim().length >= SIDEBAR_SEARCH_MIN_LENGTH && dropdown.innerHTML) dropdown.hidden = false;
+    if (input.value.trim().length >= SIDEBAR_SEARCH_MIN_LENGTH && dropdown.innerHTML) showDropdown();
   });
 
   // Double-clicking the box itself is a shortcut straight to the full
@@ -190,14 +200,18 @@ function setUpSidebarSearch(root, navigate) {
   if (!documentListenersAttached) {
     documentListenersAttached = true;
     document.addEventListener('click', (event) => {
-      if (!currentSearchDropdown || currentSearchDropdown.hidden) return;
+      if (!currentSearchDropdown || !currentSearchDropdown.classList.contains('open')) return;
       const activeWrapper = currentSearchDropdown.closest('.sidebar-search');
       if (activeWrapper && !activeWrapper.contains(event.target)) {
-        currentSearchDropdown.hidden = true;
+        currentSearchDropdown.classList.remove('open');
+        currentSearchDropdown.setAttribute('aria-hidden', 'true');
       }
     });
     document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && currentSearchDropdown) currentSearchDropdown.hidden = true;
+      if (event.key === 'Escape' && currentSearchDropdown) {
+        currentSearchDropdown.classList.remove('open');
+        currentSearchDropdown.setAttribute('aria-hidden', 'true');
+      }
     });
   }
 }

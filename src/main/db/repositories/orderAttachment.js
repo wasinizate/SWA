@@ -1,5 +1,8 @@
 'use strict';
 
+// Repository layer for `order_attachments`. The only place that writes
+// raw SQL for it.
+
 const { getDb } = require('../connection');
 
 // Files (screenshots, examples) attached to an order. `data` (the actual

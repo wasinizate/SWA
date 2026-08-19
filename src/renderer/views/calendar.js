@@ -23,8 +23,10 @@ import {
   fromDatetimeLocalValue,
   toDateInputValue,
   fromDateInputValue,
+  loadingHtml,
 } from '../helpers.js';
 import { isLightTheme } from '../theme.js';
+import { showToast } from '../toast.js';
 
 const EVENT_TYPE_PRESETS = ['Delivery deadline', 'Custom shoot', 'Screening call', 'Follow-up', 'Personal reminder', 'Other'];
 
@@ -60,13 +62,13 @@ export function renderCalendarView(container, { navigate }) {
         <button type="button" id="new-event">+ New event</button>
       </div>
     </div>
-    <div id="calendar-mount"${colorSchemeAttr}></div>
+    <div id="calendar-mount"${colorSchemeAttr}>${loadingHtml()}</div>
   `;
 
   container.querySelector('#export-all-ics').addEventListener('click', async () => {
     try {
       const savedPath = await window.api.calendarEvent.exportAllIcs();
-      if (savedPath) alert(`Saved to:\n${savedPath}`);
+      if (savedPath) showToast(`Saved to: ${savedPath}`);
     } catch (err) {
       alert(`Failed to export: ${err.message}`);
     }
@@ -312,7 +314,7 @@ export function renderCalendarView(container, { navigate }) {
       overlay.querySelector('#event-export-ics').addEventListener('click', async () => {
         try {
           const savedPath = await window.api.calendarEvent.exportIcs(data.id);
-          if (savedPath) alert(`Saved to:\n${savedPath}`);
+          if (savedPath) showToast(`Saved to: ${savedPath}`);
         } catch (err) {
           alert(`Failed to export: ${err.message}`);
         }

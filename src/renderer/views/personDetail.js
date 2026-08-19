@@ -5,11 +5,12 @@
 // creating a new order, which drops you straight onto its page (the same
 // "click New Ticket, land on the ticket" flow as a ticketing system).
 
-import { escapeHtml, formatMoney, buildStatusOptions } from '../helpers.js';
+import { escapeHtml, formatMoney, buildStatusOptions, loadingHtml } from '../helpers.js';
 import { promptForPassphrase } from '../exportPassphrasePrompt.js';
+import { showToast } from '../toast.js';
 
 export function renderPersonDetailView(container, { navigate, personId }) {
-  container.innerHTML = '<p>Loading...</p>';
+  container.innerHTML = loadingHtml();
   load();
 
   async function load() {
@@ -43,7 +44,7 @@ export function renderPersonDetailView(container, { navigate, personId }) {
         </form>
         <table class="data-table">
           <thead><tr><th>Platform</th><th>Username</th><th>Verified</th><th></th></tr></thead>
-          <tbody id="account-rows"></tbody>
+          <tbody id="account-rows"><tr><td colspan="4" class="loading-state">Loading…</td></tr></tbody>
         </table>
       </section>
 
@@ -65,13 +66,13 @@ export function renderPersonDetailView(container, { navigate, personId }) {
               <button type="button" class="totals-tab" data-period="month">By month</button>
             </div>
           </div>
-          <div id="totals-body"></div>
+          <div id="totals-body">${loadingHtml()}</div>
           <p class="hint">Excludes cancelled orders and orders without a recorded payment date.</p>
         </div>
 
         <table class="data-table">
           <thead><tr><th>#</th><th>Date paid</th><th>Amount</th><th>Status</th></tr></thead>
-          <tbody id="order-rows"></tbody>
+          <tbody id="order-rows"><tr><td colspan="4" class="loading-state">Loading…</td></tr></tbody>
         </table>
       </section>
     `;
@@ -84,6 +85,7 @@ export function renderPersonDetailView(container, { navigate, personId }) {
         generalNotes: container.querySelector('#general-notes').value,
         screeningNotes: container.querySelector('#screening-notes').value,
       });
+      showToast('Notes saved.');
     });
 
     container.querySelector('#account-form').addEventListener('submit', async (event) => {
@@ -122,7 +124,7 @@ export function renderPersonDetailView(container, { navigate, personId }) {
 
       try {
         const savedPath = await window.api.dataExchange.exportPerson(personId, passphrase);
-        if (savedPath) alert(`Saved to:\n${savedPath}`);
+        if (savedPath) showToast(`Saved to: ${savedPath}`);
       } catch (err) {
         alert(`Failed to export: ${err.message}`);
       }

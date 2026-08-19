@@ -6,22 +6,21 @@
 //
 // Unlike Orders/People, income statements don't get their own detail
 // page -- their attachment grid is a small inline expandable row here,
-// reusing orderDetail.js's attachment pattern (upload -> ArrayBuffer ->
-// IPC, thumbnail/file-icon grid, Save/Delete) scoped to
-// income_statement_id instead of order_id.
+// reusing the shared attachmentGrid.js factory (also used by
+// orderDetail.js) scoped to income_statement_id instead of order_id.
 
 import {
   escapeHtml,
   formatMoney,
-  formatBytes,
   previewText,
   parseMoneyToCents,
   toDateInputValue,
   orderStatusLabel,
   EXPENSE_CATEGORY_PRESETS,
+  loadingHtml,
 } from '../helpers.js';
-
-const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024; // keep in sync with incomeStatementAttachmentIpc.js's cap
+import { createAttachmentGrid } from '../attachmentGrid.js';
+import { showToast } from '../toast.js';
 
 function todayDateInputValue() {
   return toDateInputValue(new Date().toISOString());
@@ -61,7 +60,7 @@ export function renderExpensesView(container, { navigate }) {
           <button type="button" class="totals-tab" data-period="month">By month</button>
         </div>
       </div>
-      <div id="income-summary-body"></div>
+      <div id="income-summary-body">${loadingHtml()}</div>
       <p class="hint">
         "Net" is confirmed income + income statements − expenses. Slated
         income (below) is money expected from unpaid orders -- not
@@ -69,7 +68,7 @@ export function renderExpensesView(container, { navigate }) {
       </p>
 
       <h3>Slated income</h3>
-      <div id="slated-income-body"></div>
+      <div id="slated-income-body">${loadingHtml()}</div>
     </section>
 
     <section class="card">
@@ -98,7 +97,7 @@ export function renderExpensesView(container, { navigate }) {
 
       <table class="data-table">
         <thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Amount</th><th></th></tr></thead>
-        <tbody id="expense-rows"></tbody>
+        <tbody id="expense-rows"><tr><td colspan="5" class="loading-state">Loading…</td></tr></tbody>
       </table>
     </section>
 
@@ -124,7 +123,7 @@ export function renderExpensesView(container, { navigate }) {
         <thead>
           <tr><th>Period</th><th>Platform</th><th>Gross</th><th>Fees</th><th>Net</th><th>Attachments</th><th></th></tr>
         </thead>
-        <tbody id="statement-rows"></tbody>
+        <tbody id="statement-rows"><tr><td colspan="7" class="loading-state">Loading…</td></tr></tbody>
       </table>
     </section>
   `;
@@ -176,7 +175,7 @@ export function renderExpensesView(container, { navigate }) {
         ? `<table class="data-table"><thead><tr><th>${columnLabel}</th><th>Net</th></tr></thead><tbody>${rows
             .map((r) => `<tr><td>${escapeHtml(r.period)}</td><td>${formatMoney(r.netCents)}</td></tr>`)
             .join('')}</tbody></table>`
-        : '<p class="muted">No data yet.</p>';
+        : '<p class="muted">No income or expenses recorded yet.</p>';
     }
 
     // Slated income is a snapshot of what's currently pending, not
@@ -294,99 +293,34 @@ export function renderExpensesView(container, { navigate }) {
     });
     container.querySelector('#expense-form').reset();
     container.querySelector('#expense-date').value = todayDateInputValue();
+    showToast('Expense added.');
     await refreshExpenses();
     await refreshSummary();
   });
 
   // ---- Income statements ------------------------------------------------
 
-  const statementAttachmentObjectUrls = new Map(); // statementId -> url[]
-
-  function revokeStatementAttachmentUrls(statementId) {
-    (statementAttachmentObjectUrls.get(statementId) || []).forEach((url) => URL.revokeObjectURL(url));
-    statementAttachmentObjectUrls.set(statementId, []);
-  }
-
-  function openLightbox(url, altText) {
-    const overlay = document.createElement('div');
-    overlay.className = 'lightbox';
-    overlay.innerHTML = `<button type="button" class="btn-secondary lightbox-close">Close</button><img src="${url}" alt="${escapeHtml(altText)}" />`;
-
-    function close() {
-      overlay.remove();
-      document.removeEventListener('keydown', onKeydown);
-    }
-    function onKeydown(event) {
-      if (event.key === 'Escape') close();
-    }
-    overlay.addEventListener('click', (event) => {
-      if (event.target === overlay || event.target.classList.contains('lightbox-close')) close();
+  // One attachmentGrid instance per expanded row, created on demand when
+  // its "Attachments" toggle is opened (the row's grid/input elements
+  // don't exist in the DOM until then -- see refreshStatements() below).
+  function openStatementAttachmentGrid(statementId, row) {
+    const grid = createAttachmentGrid({
+      gridEl: row.querySelector('[data-attachment-grid]'),
+      inputEl: row.querySelector('[data-statement-attachment-input]'),
+      api: {
+        list: () => window.api.incomeStatementAttachment.listByStatement(statementId),
+        get: (id) => window.api.incomeStatementAttachment.get(id),
+        add: ({ fileName, mimeType, data }) =>
+          window.api.incomeStatementAttachment.add({ incomeStatementId: statementId, fileName, mimeType, data }),
+        saveToDisk: (id) => window.api.incomeStatementAttachment.saveToDisk(id),
+        remove: (id) => window.api.incomeStatementAttachment.delete(id),
+      },
+      // refreshStatements() rebuilds the whole table (updating this row's
+      // "N file(s)" count) -- it also resets every row back to collapsed,
+      // same as this page's behavior before this was extracted.
+      onChange: () => refreshStatements(),
     });
-    document.addEventListener('keydown', onKeydown);
-
-    container.appendChild(overlay);
-  }
-
-  async function refreshStatementAttachments(statementId) {
-    revokeStatementAttachmentUrls(statementId);
-    const attachments = await window.api.incomeStatementAttachment.listByStatement(statementId);
-    const grid = container.querySelector(`[data-attachment-grid="${statementId}"]`);
-    if (!grid) return;
-
-    if (attachments.length === 0) {
-      grid.innerHTML = '<p class="muted">No attachments yet.</p>';
-      return;
-    }
-
-    grid.innerHTML = attachments
-      .map(
-        (a) => `
-        <div class="attachment-item">
-          <div data-attachment-preview="${a.id}">
-            ${a.mime_type.startsWith('image/') ? '' : '<div class="attachment-file">📎</div>'}
-          </div>
-          <div class="attachment-name">${escapeHtml(a.file_name)}</div>
-          <div class="attachment-meta">${formatBytes(a.byte_size)}</div>
-          <div class="attachment-actions">
-            <button type="button" class="btn-secondary btn-sm" data-save-attachment="${a.id}">Save</button>
-            <button type="button" class="danger btn-sm" data-delete-attachment="${a.id}">Delete</button>
-          </div>
-        </div>`
-      )
-      .join('');
-
-    for (const a of attachments) {
-      if (!a.mime_type.startsWith('image/')) continue;
-      const full = await window.api.incomeStatementAttachment.get(a.id);
-      const blob = new Blob([full.data], { type: full.mime_type });
-      const url = URL.createObjectURL(blob);
-      statementAttachmentObjectUrls.get(statementId).push(url);
-      const previewEl = grid.querySelector(`[data-attachment-preview="${a.id}"]`);
-      if (previewEl) {
-        previewEl.innerHTML = `<img class="attachment-thumb" src="${url}" alt="${escapeHtml(a.file_name)}" />`;
-        previewEl.querySelector('img').addEventListener('click', () => openLightbox(url, a.file_name));
-      }
-    }
-
-    grid.querySelectorAll('[data-save-attachment]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        try {
-          const savedPath = await window.api.incomeStatementAttachment.saveToDisk(Number(btn.dataset.saveAttachment));
-          if (savedPath) alert(`Saved to:\n${savedPath}`);
-        } catch (err) {
-          alert(`Failed to save: ${err.message}`);
-        }
-      });
-    });
-
-    grid.querySelectorAll('[data-delete-attachment]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        if (!confirm('Delete this attachment?')) return;
-        await window.api.incomeStatementAttachment.delete(Number(btn.dataset.deleteAttachment));
-        await refreshStatementAttachments(statementId);
-        await refreshStatements(); // updates the row's attachment count
-      });
-    });
+    return grid.refresh();
   }
 
   let allStatements = [];
@@ -430,37 +364,7 @@ export function renderExpensesView(container, { navigate }) {
         const statementId = Number(btn.dataset.toggleAttachments);
         const row = rowsEl.querySelector(`[data-attachments-row="${statementId}"]`);
         row.hidden = !row.hidden;
-        if (!row.hidden) await refreshStatementAttachments(statementId);
-      });
-    });
-
-    rowsEl.querySelectorAll('[data-statement-attachment-input]').forEach((input) => {
-      input.addEventListener('change', async (event) => {
-        const statementId = Number(input.dataset.statementAttachmentInput);
-        const files = Array.from(event.target.files || []);
-        event.target.value = ''; // allow re-selecting the same file(s) later
-        if (files.length === 0) return;
-
-        for (const file of files) {
-          if (file.size > MAX_ATTACHMENT_BYTES) {
-            alert(`"${file.name}" is too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). The limit is 20MB per file.`);
-            continue;
-          }
-          const buffer = await file.arrayBuffer();
-          try {
-            await window.api.incomeStatementAttachment.add({
-              incomeStatementId: statementId,
-              fileName: file.name,
-              mimeType: file.type || 'application/octet-stream',
-              data: new Uint8Array(buffer),
-            });
-          } catch (err) {
-            alert(`Failed to attach "${file.name}": ${err.message}`);
-          }
-        }
-
-        await refreshStatementAttachments(statementId);
-        await refreshStatements();
+        if (!row.hidden) await openStatementAttachmentGrid(statementId, row);
       });
     });
 
@@ -504,6 +408,7 @@ export function renderExpensesView(container, { navigate }) {
     container.querySelector('#statement-form').reset();
     container.querySelector('#statement-period-start').value = todayDateInputValue();
     container.querySelector('#statement-period-end').value = todayDateInputValue();
+    showToast('Income statement added.');
     await refreshStatements();
     await refreshSummary();
   });

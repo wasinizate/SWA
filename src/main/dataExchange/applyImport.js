@@ -74,15 +74,23 @@ function resolvePersonId(personExternalId) {
   return personExternalLinkRepo.getPersonIdForExternalId(personExternalId);
 }
 
-// How many of a bundle order's attachments aren't already present
-// locally -- matched by (fileName, byteSize), cheap and sufficient
-// (never used to remove anything, only to decide whether to add).
-function countNewAttachments(localOrderId, incomingAttachments) {
-  const existing = orderAttachmentRepo.listByOrder(localOrderId);
+// Given an already-fetched list of existing attachments (so callers that
+// need to add them too only fetch once, not once per attachment) and a
+// bundle's incoming attachment list, returns the incoming ones not
+// already present locally -- matched by (fileName, byteSize), cheap and
+// sufficient (never used to remove anything, only to decide whether to
+// add). Shared by the read-only preview path and the actual apply path
+// below, instead of each re-implementing the same match.
+function findNewAttachments(existingAttachments, incomingAttachments) {
   return incomingAttachments.filter((a) => {
     const byteSize = Buffer.from(a.dataBase64, 'base64').length;
-    return !existing.some((e) => e.file_name === a.fileName && e.byte_size === byteSize);
-  }).length;
+    return !existingAttachments.some((e) => e.file_name === a.fileName && e.byte_size === byteSize);
+  });
+}
+
+function countNewAttachments(localOrderId, incomingAttachments) {
+  const existing = orderAttachmentRepo.listByOrder(localOrderId);
+  return findNewAttachments(existing, incomingAttachments).length;
 }
 
 // Read-only: what would happen if this bundle were imported right now.
@@ -122,7 +130,7 @@ function previewImport(bundle) {
     // the "attach to an existing client" picker) -- omitted otherwise so
     // an already-linked import's preview doesn't carry the whole client
     // list for nothing.
-    people: resolvedPersonId === null ? personRepo.list() : [],
+    people: resolvedPersonId === null ? personRepo.listAll() : [],
   };
 }
 
@@ -273,20 +281,15 @@ function applyImport(bundle, resolution = {}) {
         ordersSkipped += 1;
       }
 
-      for (const attachment of orderData.attachments) {
-        const byteSize = Buffer.from(attachment.dataBase64, 'base64').length;
-        const alreadyHave = orderAttachmentRepo
-          .listByOrder(localOrder.id)
-          .some((e) => e.file_name === attachment.fileName && e.byte_size === byteSize);
-        if (!alreadyHave) {
-          orderAttachmentRepo.create({
-            orderId: localOrder.id,
-            fileName: attachment.fileName,
-            mimeType: attachment.mimeType,
-            data: Buffer.from(attachment.dataBase64, 'base64'),
-          });
-          attachmentsAdded += 1;
-        }
+      const existingAttachments = orderAttachmentRepo.listByOrder(localOrder.id); // fetched once, not once per attachment
+      for (const attachment of findNewAttachments(existingAttachments, orderData.attachments)) {
+        orderAttachmentRepo.create({
+          orderId: localOrder.id,
+          fileName: attachment.fileName,
+          mimeType: attachment.mimeType,
+          data: Buffer.from(attachment.dataBase64, 'base64'),
+        });
+        attachmentsAdded += 1;
       }
     } else {
       ordersSkipped += 1;

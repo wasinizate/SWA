@@ -15,7 +15,7 @@ export function renderPeopleView(container, { navigate }) {
     <p class="error" id="error" hidden></p>
     <table class="data-table">
       <thead><tr><th>Label</th><th>Added</th><th></th></tr></thead>
-      <tbody id="rows"></tbody>
+      <tbody id="rows"><tr><td colspan="3" class="loading-state">Loading…</td></tr></tbody>
     </table>
   `;
 
@@ -23,10 +23,10 @@ export function renderPeopleView(container, { navigate }) {
   const rowsEl = container.querySelector('#rows');
 
   async function refresh() {
-    const people = await window.api.person.list();
+    const people = await window.api.person.listAll();
 
     if (people.length === 0) {
-      rowsEl.innerHTML = '<tr><td colspan="3" class="muted">No clients added yet.</td></tr>';
+      rowsEl.innerHTML = '<tr><td colspan="3" class="muted">No clients yet.</td></tr>';
       return;
     }
 
