@@ -48,7 +48,16 @@ function orderDueEventId(orderId) {
   return `order-due-${orderId}`;
 }
 
-export function renderCalendarView(container, { navigate }) {
+// Local (not UTC) YYYY-MM-DD formatting for a FullCalendar day-cell Date
+// -- matching it against delivery_due_date via toISOString() would risk
+// an off-by-one day depending on the machine's UTC offset (the exact
+// class of date/timezone bug this codebase has been bitten by before).
+function toDateKey(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+export function renderCalendarView(container, { navigate, focusOrderId }) {
   // FullCalendar's built-in dark palette is only appropriate for this
   // app's dark themes -- Sakura is light, so let FullCalendar fall back
   // to its own light default there instead of forcing dark-on-light.
@@ -123,7 +132,7 @@ export function renderCalendarView(container, { navigate }) {
     calendar.addEventSource(events);
   }
 
-  function initCalendar(initialEvents) {
+  function initCalendar(initialEvents, targetDateStr) {
     const mount = container.querySelector('#calendar-mount');
     calendar = new FullCalendar.Calendar(mount, {
       initialView: 'dayGridMonth',
@@ -134,6 +143,10 @@ export function renderCalendarView(container, { navigate }) {
       },
       height: 'auto',
       events: initialEvents,
+      // Highlights the day a Search-result deep link (search.js) landed
+      // on, so it's visually obvious in month view rather than just
+      // scrolled-to -- see .calendar-target-day in main.css.
+      dayCellClassNames: (arg) => (targetDateStr && toDateKey(arg.date) === targetDateStr ? ['calendar-target-day'] : []),
       // Clicking a day cell in month view always reports allDay: true
       // (a day cell has no time granularity) -- but defaulting new
       // events to timed, not all-day, makes it obvious at a glance that
@@ -342,6 +355,18 @@ export function renderCalendarView(container, { navigate }) {
 
   (async () => {
     const initialEvents = await loadEvents();
-    initCalendar(initialEvents);
+
+    // A Search result for an order with a due date (search.js) can pass
+    // focusOrderId to land here already centered on that date -- resolved
+    // up front so the very first render already knows which day to
+    // highlight, rather than highlighting late after a second render pass.
+    let targetDateStr = null;
+    if (focusOrderId) {
+      const order = await window.api.order.get(focusOrderId);
+      if (order && order.delivery_due_date) targetDateStr = order.delivery_due_date;
+    }
+
+    initCalendar(initialEvents, targetDateStr);
+    if (targetDateStr) calendar.gotoDate(targetDateStr);
   })();
 }

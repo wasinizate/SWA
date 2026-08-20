@@ -1,6 +1,7 @@
 // The main app shell shown once the vault is unlocked: a sidebar for
 // navigation plus a content area that the active view renders into.
 
+import { renderDashboardView } from './dashboard.js';
 import { renderPeopleView } from './people.js';
 import { renderPersonDetailView } from './personDetail.js';
 import { renderOrderDetailView } from './orderDetail.js';
@@ -36,6 +37,7 @@ export function renderShell(root, { onLocked }) {
           <div class="sidebar-search-dropdown" id="sidebar-search-dropdown" aria-hidden="true"></div>
         </div>
         <ul class="nav-list">
+          <li><button class="nav-link" data-view="dashboard">Dashboard</button></li>
           <li><button class="nav-link" data-view="people">Clients</button></li>
           <li><button class="nav-link" data-view="orders">Orders</button></li>
           <li><button class="nav-link" data-view="calendar">Calendar</button></li>
@@ -56,11 +58,12 @@ export function renderShell(root, { onLocked }) {
     });
     content.innerHTML = '';
 
-    if (viewName === 'people') renderPeopleView(content, { navigate });
+    if (viewName === 'dashboard') renderDashboardView(content, { navigate });
+    else if (viewName === 'people') renderPeopleView(content, { navigate });
     else if (viewName === 'personDetail') renderPersonDetailView(content, { navigate, personId: params.personId });
     else if (viewName === 'orderDetail') renderOrderDetailView(content, { navigate, orderId: params.orderId });
     else if (viewName === 'orders') renderOrdersView(content, { navigate });
-    else if (viewName === 'calendar') renderCalendarView(content, { navigate });
+    else if (viewName === 'calendar') renderCalendarView(content, { navigate, focusOrderId: params.focusOrderId });
     else if (viewName === 'search') renderSearchView(content, { navigate, query: params.query });
     else if (viewName === 'expenses') renderExpensesView(content, { navigate });
     else if (viewName === 'settings') renderSettingsView(content, { navigate });

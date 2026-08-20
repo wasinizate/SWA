@@ -35,6 +35,16 @@ export function renderPersonDetailView(container, { navigate, personId }) {
       </section>
 
       <section class="card">
+        <h2>Tags</h2>
+        <div id="tag-list" class="tag-list"></div>
+        <form id="tag-form" class="inline-form">
+          <input type="text" id="tag-input" placeholder="Add a tag (e.g. regular, verified)" list="tag-options" />
+          <datalist id="tag-options"></datalist>
+          <button type="submit" class="btn-secondary">Add</button>
+        </form>
+      </section>
+
+      <section class="card">
         <h2>Platform accounts</h2>
         <form id="account-form" class="inline-form">
           <input type="text" id="platform-name" placeholder="Platform (e.g. OnlyFans)" required />
@@ -86,6 +96,16 @@ export function renderPersonDetailView(container, { navigate, personId }) {
         screeningNotes: container.querySelector('#screening-notes').value,
       });
       showToast('Notes saved.');
+    });
+
+    container.querySelector('#tag-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const input = container.querySelector('#tag-input');
+      const label = input.value.trim();
+      if (!label) return;
+      await window.api.tag.addToPerson(personId, label);
+      input.value = '';
+      await refreshTags();
     });
 
     container.querySelector('#account-form').addEventListener('submit', async (event) => {
@@ -162,9 +182,42 @@ export function renderPersonDetailView(container, { navigate, personId }) {
 
     // ---- Initial data load ------------------------------------------------
 
+    await refreshTags();
     await refreshAccounts();
     await refreshOrders();
     await refreshTotals();
+
+    async function refreshTags() {
+      const [tags, allTags] = await Promise.all([window.api.tag.listForPerson(personId), window.api.tag.listAll()]);
+
+      const listEl = container.querySelector('#tag-list');
+      listEl.innerHTML = tags.length
+        ? tags
+            .map(
+              (t) => `
+            <span class="tag-chip">
+              ${escapeHtml(t.label)}
+              <button type="button" class="tag-chip-remove" data-remove-tag="${t.id}" aria-label="Remove ${escapeHtml(t.label)}">&times;</button>
+            </span>`
+            )
+            .join('')
+        : '<p class="muted">No tags yet.</p>';
+
+      listEl.querySelectorAll('[data-remove-tag]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          await window.api.tag.removeFromPerson(personId, Number(btn.dataset.removeTag));
+          await refreshTags();
+        });
+      });
+
+      // Every tag that exists anywhere, not just this person's -- that's
+      // the point of autocomplete: reuse existing spelling instead of
+      // accidentally creating "Regular" and "regular" as two tags (the
+      // UNIQUE COLLATE NOCASE column would actually prevent that exact
+      // case, but matching case-insensitively up front avoids relying on
+      // the constraint to paper over a near-miss).
+      container.querySelector('#tag-options').innerHTML = allTags.map((t) => `<option value="${escapeHtml(t.label)}"></option>`).join('');
+    }
 
     async function refreshAccounts() {
       const accounts = await window.api.platformAccount.listByPerson(personId);

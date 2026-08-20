@@ -45,6 +45,16 @@ function registerSettingsIpc() {
     settingsRepo.setTheme(theme);
     return theme;
   });
+
+  ipcMain.handle('settings:getDashboardNote', () => {
+    if (!connection.isOpen()) return null;
+    return settingsRepo.getDashboardNote();
+  });
+
+  ipcMain.handle('settings:setDashboardNote', (_event, note) => {
+    settingsRepo.setDashboardNote(note);
+    return note;
+  });
 }
 
 module.exports = { registerSettingsIpc };

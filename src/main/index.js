@@ -16,6 +16,7 @@ const { installMacMenu } = require('./menu');
 const { registerVaultIpc } = require('./ipc/vaultIpc');
 const { registerPersonIpc } = require('./ipc/personIpc');
 const { registerPlatformAccountIpc } = require('./ipc/platformAccountIpc');
+const { registerTagIpc } = require('./ipc/tagIpc');
 const { registerOrderIpc } = require('./ipc/orderIpc');
 const { registerOrderAttachmentIpc } = require('./ipc/orderAttachmentIpc');
 const { registerCalendarEventIpc } = require('./ipc/calendarEventIpc');
@@ -68,6 +69,7 @@ app.whenReady().then(() => {
   registerVaultIpc({ onUnlocked: notifyUnlocked, onLocked: notifyLocked });
   registerPersonIpc();
   registerPlatformAccountIpc();
+  registerTagIpc();
   registerOrderIpc();
   registerOrderAttachmentIpc();
   registerCalendarEventIpc();

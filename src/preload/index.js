@@ -45,6 +45,13 @@ contextBridge.exposeInMainWorld('api', {
     update: (id, data) => ipcRenderer.invoke('platformAccount:update', id, data),
     delete: (id) => ipcRenderer.invoke('platformAccount:delete', id),
   },
+  tag: {
+    listAll: () => ipcRenderer.invoke('tag:listAll'),
+    listForPerson: (personId) => ipcRenderer.invoke('tag:listForPerson', personId),
+    listGroupedByPerson: () => ipcRenderer.invoke('tag:listGroupedByPerson'),
+    addToPerson: (personId, label) => ipcRenderer.invoke('tag:addToPerson', personId, label),
+    removeFromPerson: (personId, tagId) => ipcRenderer.invoke('tag:removeFromPerson', personId, tagId),
+  },
   order: {
     listByPerson: (personId) => ipcRenderer.invoke('order:listByPerson', personId),
     listAll: () => ipcRenderer.invoke('order:listAll'),
@@ -55,6 +62,7 @@ contextBridge.exposeInMainWorld('api', {
     getTotalsByPerson: (personId) => ipcRenderer.invoke('order:getTotalsByPerson', personId),
     listWithDeliveryDueDates: () => ipcRenderer.invoke('order:listWithDeliveryDueDates'),
     getDueDateSummary: () => ipcRenderer.invoke('order:getDueDateSummary'),
+    getOpenOrderCount: () => ipcRenderer.invoke('order:getOpenOrderCount'),
     exportPdf: (id) => ipcRenderer.invoke('order:exportPdf', id),
     getSlatedIncomeTotals: () => ipcRenderer.invoke('order:getSlatedIncomeTotals'),
     getTotalsAll: () => ipcRenderer.invoke('order:getTotalsAll'),
@@ -115,6 +123,8 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('settings:setOrderDueReminderConfig', { enabled, daysBefore, showSummaryOnOpen }),
     getTheme: () => ipcRenderer.invoke('settings:getTheme'),
     setTheme: (theme) => ipcRenderer.invoke('settings:setTheme', theme),
+    getDashboardNote: () => ipcRenderer.invoke('settings:getDashboardNote'),
+    setDashboardNote: (note) => ipcRenderer.invoke('settings:setDashboardNote', note),
   },
   update: {
     // Manual, opt-in only -- see updates/checkForUpdates.js. Nothing

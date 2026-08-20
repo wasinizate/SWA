@@ -71,6 +71,17 @@ function setTheme(theme) {
   setSetting('theme', theme);
 }
 
+// Freeform text for the Dashboard's notes scratchpad -- not tied to any
+// client/order, just one more small piece of app state, same reasoning
+// as everything else in this table (see 0001_init.sql's comment).
+function getDashboardNote() {
+  return getSetting('dashboard_note', '');
+}
+
+function setDashboardNote(note) {
+  setSetting('dashboard_note', note);
+}
+
 module.exports = {
   DEFAULT_IDLE_TIMEOUT_SECONDS,
   getIdleTimeoutSeconds,
@@ -84,4 +95,6 @@ module.exports = {
   DEFAULT_THEME,
   getTheme,
   setTheme,
+  getDashboardNote,
+  setDashboardNote,
 };

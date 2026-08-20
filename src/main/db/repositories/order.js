@@ -225,6 +225,16 @@ function getSlatedIncomeTotals() {
   return { totalCents, orders };
 }
 
+// Count of orders still "in flight" -- same NOT IN ('completed','cancelled')
+// definition getDueDateSummary() already uses to decide what's still
+// relevant to a due-date digest. Used by the Dashboard's "Open orders"
+// stat card.
+function getOpenOrderCount() {
+  return getDb()
+    .prepare(`SELECT COUNT(*) AS count FROM orders WHERE status NOT IN ('completed', 'cancelled')`)
+    .get().count;
+}
+
 // Same all-time/by-year/by-month shape as getTotalsByPerson(), but
 // across every person -- needed by the Expenses page's business-wide
 // "confirmed income" figure, which has no single person to scope to.
@@ -301,6 +311,7 @@ module.exports = {
   listWithDeliveryDueDates,
   markDueReminderNotified,
   getDueDateSummary,
+  getOpenOrderCount,
   getSlatedIncomeTotals,
   getTotalsAll,
   getByExternalId,

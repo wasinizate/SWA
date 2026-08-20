@@ -175,7 +175,8 @@ textarea:focus-visible,
   margin-bottom: 0.75rem;
 }
 
-.section-header h2 {
+.section-header h2,
+.section-header h1 {
   margin-bottom: 0;
 }
 
@@ -725,6 +726,28 @@ hr {
   color: var(--accent);
 }
 
+/* Dashboard's stat cards (dashboard.js) reuse .income-stat above but are
+   real <button>s that double as navigation shortcuts -- reset back to
+   plain-block styling, then layer a hover/focus treatment so they still
+   read as clickable. */
+.stat-clickable {
+  all: unset;
+  cursor: pointer;
+  display: block;
+  box-sizing: border-box;
+}
+
+.stat-clickable:hover .income-stat-value,
+.stat-clickable:focus-visible .income-stat-value {
+  color: var(--accent);
+}
+
+.stat-clickable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius);
+}
+
 .toolbar {
   display: flex;
   gap: 1.5rem;
@@ -907,6 +930,14 @@ hr {
   margin-top: 0;
 }
 
+/* Wider variant for content with more going on (e.g. the Import modals
+   opened from people.js/orders.js via src/renderer/modal.js), where the
+   default 480px feels cramped once an import preview's change list is
+   showing. */
+.modal-wide {
+  max-width: 640px;
+}
+
 /* Non-blocking toast notifications (toast.js) -- replaces alert() for
    routine success messages. Bottom-corner stack, fades in/out; a manual
    dismiss (x) since some messages (a saved file's path) are worth
@@ -1009,6 +1040,52 @@ hr {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1rem;
+}
+
+/* Marks the day a Search-result deep link (search.js -> calendar.js's
+   focusOrderId) landed on -- an inset ring rather than a background fill
+   so it doesn't fight FullCalendar's own "today" highlight if the two
+   ever coincide. */
+.calendar-target-day {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* Client tags (personDetail.js's "Tags" card, people.js's list column) --
+   small pills. .tag-chip-remove is only present in the editable version
+   on personDetail.js; the read-only chips on the Clients list reuse
+   .tag-chip alone. */
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.tag-chip-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0 0.15rem;
+  margin: 0 -0.2rem 0 0.1rem;
+}
+
+.tag-chip-remove:hover {
+  color: var(--danger);
 }
 
 /* Theme picker (Settings > Appearance, settings.js). Each swatch previews

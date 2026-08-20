@@ -48,14 +48,6 @@ longer-term ideas.
   `shell.openExternal()` to hand off to the user's own, already-logged-in
   default browser -- gets most of the convenience with none of the above
   risk, and doesn't add a network code path to this app's own process.
-- **Deep-linking from Search results into the Calendar.** Search
-  (People + Orders) shipped in v0.1.2, but its results link to the
-  existing Person/Order detail pages rather than opening the Calendar at
-  a specific date/event -- `renderCalendarView`
-  (`src/renderer/views/calendar.js`) and `shell.js`'s `navigate()` don't
-  currently accept a target date/event to jump to. Worth adding later if
-  it turns out to matter in practice; not needed for search to be
-  useful, since due dates already show automatically on the calendar.
 - **Google Calendar / Apple Calendar sync.** In real tension with this
   app's "no network calls, fully offline" non-negotiable (see README's
   threat model), so if built, it must be:
