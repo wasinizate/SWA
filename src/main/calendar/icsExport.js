@@ -56,7 +56,10 @@ function formatIcsDateOnly(value) {
   return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
 }
 
-// items: [{ uid, title, notes, start, end, allDay }]
+// items: [{ uid, title, notes, start, end, allDay, priority }]
+// priority is an RFC 5545 PRIORITY integer (1 = highest ... 9 = lowest);
+// omitted entirely for "no special priority" rather than sending 0, same
+// as the spec's own "undefined" convention.
 function buildIcs(items) {
   const stamp = formatIcsDateTime(new Date().toISOString());
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//SWA//EN', 'CALSCALE:GREGORIAN'];
@@ -76,6 +79,7 @@ function buildIcs(items) {
 
     lines.push(`SUMMARY:${escapeIcsText(item.title)}`);
     if (item.notes) lines.push(`DESCRIPTION:${escapeIcsText(item.notes)}`);
+    if (item.priority) lines.push(`PRIORITY:${item.priority}`);
     lines.push('END:VEVENT');
   }
 

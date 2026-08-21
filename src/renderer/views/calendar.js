@@ -13,9 +13,10 @@
 //     generic event modal, since the due date is only ever editable
 //     there.
 //
-// There's deliberately no "pick a person/order" field inside the event
-// modal -- with potentially hundreds of orders, a usable picker needs
-// search, which is its own later round.
+// The event modal's client->order cascade (pick a client, then one of
+// their orders) is how a freeform event actually gets linked to an
+// order -- a plain "every order in one <select>" wouldn't scale with
+// potentially hundreds of orders, so it's scoped down to a client first.
 
 import {
   escapeHtml,
@@ -24,11 +25,31 @@ import {
   toDateInputValue,
   fromDateInputValue,
   loadingHtml,
+  previewText,
 } from '../helpers.js';
 import { isLightTheme } from '../theme.js';
 import { showToast } from '../toast.js';
+import { openModal } from '../modal.js';
 
 const EVENT_TYPE_PRESETS = ['Delivery deadline', 'Custom shoot', 'Screening call', 'Follow-up', 'Personal reminder', 'Other'];
+
+const PRIORITY_OPTIONS = [
+  { value: 'normal', label: 'Normal' },
+  { value: 'high', label: 'High' },
+  { value: 'urgent', label: 'Urgent' },
+];
+
+// FullCalendar accepts a CSS custom property string directly as an
+// event's `color` -- resolved by the browser same as any inline style --
+// so these stay theme-aware without needing per-theme hex values here.
+// 'normal' returns undefined, falling back to the theme's own default
+// event color; kept visually distinct from the existing amber "order
+// due" color (#f59e0b, see loadEvents() below).
+function priorityColor(priority) {
+  if (priority === 'urgent') return 'var(--danger)';
+  if (priority === 'high') return 'var(--warning)';
+  return undefined;
+}
 
 // Values are minutes-before-start, matching the reminder_minutes_before
 // column directly -- '' means no reminder (stored as NULL).
@@ -48,21 +69,37 @@ function orderDueEventId(orderId) {
   return `order-due-${orderId}`;
 }
 
-export function renderCalendarView(container, { navigate }) {
+// Local (not UTC) YYYY-MM-DD formatting for a FullCalendar day-cell Date
+// -- matching it against delivery_due_date via toISOString() would risk
+// an off-by-one day depending on the machine's UTC offset (the exact
+// class of date/timezone bug this codebase has been bitten by before).
+function toDateKey(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+export function renderCalendarView(container, { navigate, focusOrderId }) {
   // FullCalendar's built-in dark palette is only appropriate for this
   // app's dark themes -- Sakura is light, so let FullCalendar fall back
   // to its own light default there instead of forcing dark-on-light.
   const colorSchemeAttr = isLightTheme() ? '' : ' data-color-scheme="dark"';
 
+  // Wrapped in one element (rather than two siblings) so main.css's
+  // "cap every view to a 900px reading width" rule -- right for
+  // text-heavy pages, wrong for a data grid -- can be exempted for the
+  // whole calendar view in a single selector (see .calendar-page there).
   container.innerHTML = `
-    <div class="section-header">
-      <h1>Calendar</h1>
-      <div class="row-actions">
-        <button type="button" class="btn-secondary" id="export-all-ics">Export calendar to .ics</button>
-        <button type="button" id="new-event">+ New event</button>
+    <div class="calendar-page">
+      <div class="section-header">
+        <h1>Calendar</h1>
+        <div class="row-actions">
+          <button type="button" class="btn-secondary" id="import-ics">Import .ics</button>
+          <button type="button" class="btn-secondary" id="export-all-ics">Export calendar to .ics</button>
+          <button type="button" id="new-event">+ New event</button>
+        </div>
       </div>
+      <div id="calendar-mount"${colorSchemeAttr}>${loadingHtml()}</div>
     </div>
-    <div id="calendar-mount"${colorSchemeAttr}>${loadingHtml()}</div>
   `;
 
   container.querySelector('#export-all-ics').addEventListener('click', async () => {
@@ -71,6 +108,23 @@ export function renderCalendarView(container, { navigate }) {
       if (savedPath) showToast(`Saved to: ${savedPath}`);
     } catch (err) {
       alert(`Failed to export: ${err.message}`);
+    }
+  });
+
+  // Every event in the chosen file is added as a new entry here -- never
+  // matched/merged against what's already on the calendar (see
+  // icsImport.js). Order-linking can't be inferred from an external
+  // file, so imported events always land unlinked.
+  container.querySelector('#import-ics').addEventListener('click', async () => {
+    try {
+      const result = await window.api.calendarEvent.importIcs();
+      if (!result) return; // dialog cancelled
+      const parts = [`Imported ${result.imported} event(s)`];
+      if (result.skipped > 0) parts.push(`skipped ${result.skipped} that couldn't be read`);
+      showToast(parts.join(', ') + '.');
+      await refreshCalendar();
+    } catch (err) {
+      alert(`Failed to import: ${err.message}`);
     }
   });
 
@@ -97,6 +151,7 @@ export function renderCalendarView(container, { navigate }) {
       start: e.start_datetime,
       end: e.end_datetime || undefined,
       allDay: !!e.all_day,
+      color: priorityColor(e.priority),
     }));
 
     // Amber/orange, distinct from the theme's default event color, so
@@ -123,7 +178,7 @@ export function renderCalendarView(container, { navigate }) {
     calendar.addEventSource(events);
   }
 
-  function initCalendar(initialEvents) {
+  function initCalendar(initialEvents, targetDateStr) {
     const mount = container.querySelector('#calendar-mount');
     calendar = new FullCalendar.Calendar(mount, {
       initialView: 'dayGridMonth',
@@ -134,6 +189,10 @@ export function renderCalendarView(container, { navigate }) {
       },
       height: 'auto',
       events: initialEvents,
+      // Highlights the day a Search-result deep link (search.js) landed
+      // on, so it's visually obvious in month view rather than just
+      // scrolled-to -- see .calendar-target-day in main.css.
+      dayCellClassNames: (arg) => (targetDateStr && toDateKey(arg.date) === targetDateStr ? ['calendar-target-day'] : []),
       // Clicking a day cell in month view always reports allDay: true
       // (a day cell has no time granularity) -- but defaulting new
       // events to timed, not all-day, makes it obvious at a glance that
@@ -148,7 +207,7 @@ export function renderCalendarView(container, { navigate }) {
       eventClick: (info) => {
         if (info.event.id.startsWith('order-due-')) {
           const orderId = Number(info.event.id.slice('order-due-'.length));
-          navigate('orderDetail', { orderId });
+          openOrderDueModal(orderId);
           return;
         }
         const event = eventsById.get(Number(info.event.id));
@@ -160,10 +219,44 @@ export function renderCalendarView(container, { navigate }) {
 
   container.querySelector('#new-event').addEventListener('click', () => openEventModal(null));
 
+  // Order-due entries (the amber 📦 ones) aren't real calendar_events
+  // rows -- they're synthesized live from the order's own due date (see
+  // loadEvents() above) -- so there's no "Edit event" modal for them.
+  // This is their equivalent of that modal's "View"/"Export .ics" pair,
+  // just scoped to the two things that make sense for a derived entry.
+  function openOrderDueModal(orderId) {
+    openModal({
+      title: `Order #${orderId} due date`,
+      render: (body, close) => {
+        body.innerHTML = `
+          <p class="hint">This date comes from the order's own delivery due date -- editable there.</p>
+          <div class="form-actions">
+            <button type="button" id="order-due-view">View order</button>
+            <button type="button" class="btn-secondary" id="order-due-export">Export .ics</button>
+          </div>
+        `;
+
+        body.querySelector('#order-due-view').addEventListener('click', () => {
+          close();
+          navigate('orderDetail', { orderId });
+        });
+
+        body.querySelector('#order-due-export').addEventListener('click', async () => {
+          try {
+            const savedPath = await window.api.calendarEvent.exportOrderDueIcs(orderId);
+            if (savedPath) showToast(`Saved to: ${savedPath}`);
+          } catch (err) {
+            alert(`Failed to export: ${err.message}`);
+          }
+        });
+      },
+    });
+  }
+
   // `source` is either: null (brand new, "+ New event"), a prefill object
   // from clicking a date ({ startDatetime, allDay }), or a full
   // calendar_events row from clicking an existing event (has `.id`).
-  function openEventModal(source) {
+  async function openEventModal(source) {
     const isEditing = Boolean(source && source.id);
     const data = isEditing
       ? {
@@ -176,6 +269,7 @@ export function renderCalendarView(container, { navigate }) {
           notes: source.notes,
           linkedOrderId: source.linked_order_id,
           reminderMinutesBefore: source.reminder_minutes_before,
+          priority: source.priority,
         }
       : {
           id: null,
@@ -187,7 +281,24 @@ export function renderCalendarView(container, { navigate }) {
           notes: '',
           linkedOrderId: null,
           reminderMinutesBefore: null,
+          priority: 'normal',
         };
+
+    // Pre-fills for the client->order cascade: every client (for the
+    // Client <select>), and -- if this event is already linked -- which
+    // client owns that order plus that client's own order list, so both
+    // <select>s can already show the right selection before anything's
+    // touched.
+    const allClients = await window.api.person.listAll();
+    let initialClientId = null;
+    let initialOrders = [];
+    if (data.linkedOrderId) {
+      const linkedOrder = await window.api.order.get(data.linkedOrderId);
+      if (linkedOrder) {
+        initialClientId = linkedOrder.person_id;
+        initialOrders = await window.api.order.listByPerson(initialClientId);
+      }
+    }
 
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
@@ -206,11 +317,41 @@ export function renderCalendarView(container, { navigate }) {
               ${EVENT_TYPE_PRESETS.map((t) => `<option value="${escapeHtml(t)}"></option>`).join('')}
             </datalist>
           </label>
+          <label>
+            Priority
+            <select id="event-priority">
+              ${PRIORITY_OPTIONS.map((o) => `<option value="${o.value}">${o.label}</option>`).join('')}
+            </select>
+          </label>
           <label>Notes <textarea id="event-notes" rows="4"></textarea></label>
           <label>
             Remind me
             <select id="event-reminder">
               ${REMINDER_OPTIONS.map((o) => `<option value="${o.value}">${o.label}</option>`).join('')}
+            </select>
+          </label>
+          <label>
+            Link to client
+            <select id="event-client">
+              <option value="">-- none --</option>
+              ${allClients
+                .map(
+                  (c) =>
+                    `<option value="${c.id}" ${c.id === initialClientId ? 'selected' : ''}>${escapeHtml(c.private_label)}</option>`
+                )
+                .join('')}
+            </select>
+          </label>
+          <label>
+            Link to order
+            <select id="event-order">
+              <option value="">-- none --</option>
+              ${initialOrders
+                .map(
+                  (o) =>
+                    `<option value="${o.id}" ${o.id === data.linkedOrderId ? 'selected' : ''}>#${o.id} — ${escapeHtml(previewText(o.description, 40))}</option>`
+                )
+                .join('')}
             </select>
           </label>
           ${
@@ -256,10 +397,66 @@ export function renderCalendarView(container, { navigate }) {
     setDateTimeInputValue(endInput, data.endDatetime);
     overlay.querySelector('#event-type').value = data.type || '';
     overlay.querySelector('#event-notes').value = data.notes || '';
+    overlay.querySelector('#event-priority').value = data.priority || 'normal';
     overlay.querySelector('#event-reminder').value =
       data.reminderMinutesBefore === null || data.reminderMinutesBefore === undefined
         ? ''
         : String(data.reminderMinutesBefore);
+
+    // ---- Client -> order cascade ----------------------------------------
+
+    const clientSelect = overlay.querySelector('#event-client');
+    const orderSelect = overlay.querySelector('#event-order');
+
+    async function refreshOrderOptions(personId, selectedOrderId) {
+      if (!personId) {
+        orderSelect.innerHTML = '<option value="">-- none --</option>';
+        return;
+      }
+      const orders = await window.api.order.listByPerson(personId);
+      orderSelect.innerHTML = `
+        <option value="">-- none --</option>
+        ${orders
+          .map(
+            (o) =>
+              `<option value="${o.id}" ${o.id === selectedOrderId ? 'selected' : ''}>#${o.id} — ${escapeHtml(previewText(o.description, 40))}</option>`
+          )
+          .join('')}
+      `;
+    }
+
+    // Switching clients means whatever was picked in Order no longer
+    // applies -- resets to "-- none --" rather than trying to guess a
+    // new selection.
+    clientSelect.addEventListener('change', () => {
+      refreshOrderOptions(clientSelect.value ? Number(clientSelect.value) : null, null);
+    });
+
+    // A one-time convenience nudge for the *first* time an order gets
+    // linked on this event (never on an event that arrived already
+    // linked, and only once per modal session) -- auto-fills the title
+    // (only if still empty, never clobbering something already typed)
+    // and defaults All day on, matching how order-due-date entries
+    // elsewhere in this app already default to all-day. Both stay fully
+    // editable afterward.
+    const wasLinked = Boolean(data.linkedOrderId);
+    let hasAppliedOrderNudge = false;
+
+    orderSelect.addEventListener('change', () => {
+      if (wasLinked || hasAppliedOrderNudge || !orderSelect.value) return;
+      hasAppliedOrderNudge = true;
+
+      const titleInput = overlay.querySelector('#event-title');
+      const client = allClients.find((c) => c.id === Number(clientSelect.value));
+      if (!titleInput.value.trim() && client) {
+        titleInput.value = `Order #${orderSelect.value} for ${client.private_label}`;
+      }
+
+      if (!allDayCheckbox.checked) {
+        allDayCheckbox.checked = true;
+        allDayCheckbox.dispatchEvent(new Event('change'));
+      }
+    });
 
     function closeModal() {
       overlay.remove();
@@ -299,6 +496,8 @@ export function renderCalendarView(container, { navigate }) {
         type: overlay.querySelector('#event-type').value,
         notes: overlay.querySelector('#event-notes').value,
         reminderMinutesBefore: reminderValue === '' ? null : Number(reminderValue),
+        priority: overlay.querySelector('#event-priority').value,
+        linkedOrderId: orderSelect.value ? Number(orderSelect.value) : null,
       };
 
       if (isEditing) {
@@ -342,6 +541,18 @@ export function renderCalendarView(container, { navigate }) {
 
   (async () => {
     const initialEvents = await loadEvents();
-    initCalendar(initialEvents);
+
+    // A Search result for an order with a due date (search.js) can pass
+    // focusOrderId to land here already centered on that date -- resolved
+    // up front so the very first render already knows which day to
+    // highlight, rather than highlighting late after a second render pass.
+    let targetDateStr = null;
+    if (focusOrderId) {
+      const order = await window.api.order.get(focusOrderId);
+      if (order && order.delivery_due_date) targetDateStr = order.delivery_due_date;
+    }
+
+    initCalendar(initialEvents, targetDateStr);
+    if (targetDateStr) calendar.gotoDate(targetDateStr);
   })();
 }

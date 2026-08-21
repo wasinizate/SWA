@@ -45,6 +45,20 @@ contextBridge.exposeInMainWorld('api', {
     update: (id, data) => ipcRenderer.invoke('platformAccount:update', id, data),
     delete: (id) => ipcRenderer.invoke('platformAccount:delete', id),
   },
+  tag: {
+    listAll: () => ipcRenderer.invoke('tag:listAll'),
+    listForPerson: (personId) => ipcRenderer.invoke('tag:listForPerson', personId),
+    listGroupedByPerson: () => ipcRenderer.invoke('tag:listGroupedByPerson'),
+    addToPerson: (personId, label) => ipcRenderer.invoke('tag:addToPerson', personId, label),
+    removeFromPerson: (personId, tagId) => ipcRenderer.invoke('tag:removeFromPerson', personId, tagId),
+  },
+  priceTemplate: {
+    listAll: () => ipcRenderer.invoke('priceTemplate:listAll'),
+    get: (id) => ipcRenderer.invoke('priceTemplate:get', id),
+    create: (data) => ipcRenderer.invoke('priceTemplate:create', data),
+    update: (id, data) => ipcRenderer.invoke('priceTemplate:update', id, data),
+    delete: (id) => ipcRenderer.invoke('priceTemplate:delete', id),
+  },
   order: {
     listByPerson: (personId) => ipcRenderer.invoke('order:listByPerson', personId),
     listAll: () => ipcRenderer.invoke('order:listAll'),
@@ -55,6 +69,8 @@ contextBridge.exposeInMainWorld('api', {
     getTotalsByPerson: (personId) => ipcRenderer.invoke('order:getTotalsByPerson', personId),
     listWithDeliveryDueDates: () => ipcRenderer.invoke('order:listWithDeliveryDueDates'),
     getDueDateSummary: () => ipcRenderer.invoke('order:getDueDateSummary'),
+    getOpenOrderCount: () => ipcRenderer.invoke('order:getOpenOrderCount'),
+    listLastOrderDateByPerson: () => ipcRenderer.invoke('order:listLastOrderDateByPerson'),
     exportPdf: (id) => ipcRenderer.invoke('order:exportPdf', id),
     getSlatedIncomeTotals: () => ipcRenderer.invoke('order:getSlatedIncomeTotals'),
     getTotalsAll: () => ipcRenderer.invoke('order:getTotalsAll'),
@@ -74,6 +90,8 @@ contextBridge.exposeInMainWorld('api', {
     delete: (id) => ipcRenderer.invoke('calendarEvent:delete', id),
     exportIcs: (id) => ipcRenderer.invoke('calendarEvent:exportIcs', id),
     exportAllIcs: () => ipcRenderer.invoke('calendarEvent:exportAllIcs'),
+    exportOrderDueIcs: (orderId) => ipcRenderer.invoke('calendarEvent:exportOrderDueIcs', orderId),
+    importIcs: () => ipcRenderer.invoke('calendarEvent:importIcs'),
   },
   search: {
     query: (queryText) => ipcRenderer.invoke('search:query', queryText),
@@ -115,6 +133,10 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('settings:setOrderDueReminderConfig', { enabled, daysBefore, showSummaryOnOpen }),
     getTheme: () => ipcRenderer.invoke('settings:getTheme'),
     setTheme: (theme) => ipcRenderer.invoke('settings:setTheme', theme),
+    getDashboardNote: () => ipcRenderer.invoke('settings:getDashboardNote'),
+    setDashboardNote: (note) => ipcRenderer.invoke('settings:setDashboardNote', note),
+    getQuietClientThresholdDays: () => ipcRenderer.invoke('settings:getQuietClientThresholdDays'),
+    setQuietClientThresholdDays: (days) => ipcRenderer.invoke('settings:setQuietClientThresholdDays', days),
   },
   update: {
     // Manual, opt-in only -- see updates/checkForUpdates.js. Nothing

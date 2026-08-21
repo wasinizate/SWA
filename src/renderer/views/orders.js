@@ -5,6 +5,8 @@
 
 import { escapeHtml, formatMoney, previewText, ORDER_STATUSES, buildStatusOptions, loadingHtml } from '../helpers.js';
 import { showToast } from '../toast.js';
+import { openModal } from '../modal.js';
+import { renderImportPanel } from '../importPanel.js';
 
 export function renderOrdersView(container, { navigate }) {
   container.innerHTML = `
@@ -27,6 +29,7 @@ export function renderOrdersView(container, { navigate }) {
         </select>
       </label>
       <div id="new-order-controls"></div>
+      <button type="button" class="btn-secondary" id="import-order-btn">Import order</button>
     </div>
 
     <table class="data-table">
@@ -166,6 +169,24 @@ export function renderOrdersView(container, { navigate }) {
 
   filterSelect.addEventListener('change', render);
   sortSelect.addEventListener('change', render);
+
+  // Same underlying flow as Settings' "Import" card (see
+  // src/renderer/importPanel.js) -- just surfaced here too, since this is
+  // where you'd actually look for it while managing orders.
+  container.querySelector('#import-order-btn').addEventListener('click', () => {
+    openModal({
+      title: 'Import client or order',
+      wide: true,
+      render: (body, close) => {
+        renderImportPanel(body, {
+          onImported: async () => {
+            close();
+            await load();
+          },
+        });
+      },
+    });
+  });
 
   load();
 }

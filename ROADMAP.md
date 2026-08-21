@@ -11,6 +11,24 @@ longer-term ideas.
 
 ## Later / larger
 
+- **Vault passphrase recovery via a set of random recovery phrases**
+  (BIP39-style word list, shown once at vault setup, user writes it down
+  and stores it somewhere separate from this device). Today, forgetting
+  the vault passphrase means the data is permanently unrecoverable --
+  intentional so far (`passphrase.js` is the only module that ever
+  touches a raw passphrase, and nothing is ever written to disk in
+  plaintext), but a real usability gap for a single-user local app with
+  no account-recovery-by-email fallback. Needs care, not a quick add:
+  the recovery phrase is functionally a second master key, so it has to
+  get the same never-stored-in-plaintext treatment the passphrase does
+  (derive a wrapping/encryption key from it, e.g. via PBKDF2/scrypt,
+  rather than storing the phrase or a direct hash of it) and the same
+  one-time, easy-to-misuse UX risk a written-down key always carries
+  (whoever finds the paper can unlock the vault, same trade-off already
+  called out for quick-unlock in the README's threat model). Generated
+  and shown exactly once at setup (or opt-in from Settings after the
+  fact), never regenerable/re-displayed afterward without going through
+  a full re-key.
 - **Whole-vault backup/restore.** Cross-instance export/import (Person +
   Order handoff between two installs, e.g. two people sharing a client
   roster) shipped -- see `src/main/dataExchange/`. Whole-vault backup/
@@ -48,14 +66,6 @@ longer-term ideas.
   `shell.openExternal()` to hand off to the user's own, already-logged-in
   default browser -- gets most of the convenience with none of the above
   risk, and doesn't add a network code path to this app's own process.
-- **Deep-linking from Search results into the Calendar.** Search
-  (People + Orders) shipped in v0.1.2, but its results link to the
-  existing Person/Order detail pages rather than opening the Calendar at
-  a specific date/event -- `renderCalendarView`
-  (`src/renderer/views/calendar.js`) and `shell.js`'s `navigate()` don't
-  currently accept a target date/event to jump to. Worth adding later if
-  it turns out to matter in practice; not needed for search to be
-  useful, since due dates already show automatically on the calendar.
 - **Google Calendar / Apple Calendar sync.** In real tension with this
   app's "no network calls, fully offline" non-negotiable (see README's
   threat model), so if built, it must be:

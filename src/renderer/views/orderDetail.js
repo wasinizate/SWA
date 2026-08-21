@@ -7,6 +7,8 @@
 import { escapeHtml, formatMoney, parseMoneyToCents, PAYMENT_METHOD_PRESETS, buildStatusOptions, loadingHtml } from '../helpers.js';
 import { promptForPassphrase } from '../exportPassphrasePrompt.js';
 import { createAttachmentGrid } from '../attachmentGrid.js';
+import { createLineItemRows } from '../lineItemRows.js';
+import { openModal } from '../modal.js';
 import { showToast } from '../toast.js';
 
 export function renderOrderDetailView(container, { navigate, orderId }) {
@@ -79,15 +81,33 @@ export function renderOrderDetailView(container, { navigate, orderId }) {
 
       <details class="calculator">
         <summary>Price calculator</summary>
+
+        <label>
+          Load template
+          <select id="calc-template-select">
+            <option value="">-- Select a template --</option>
+          </select>
+        </label>
+
         <table class="data-table">
           <thead><tr><th>Item</th><th>Rate ($/unit)</th><th>Qty</th><th>Subtotal</th><th></th></tr></thead>
           <tbody id="calc-rows"></tbody>
         </table>
         <button type="button" class="btn-secondary btn-sm" id="calc-add-row">Add line</button>
-        <p class="calc-total-line">Calculator total: <strong id="calc-total">$0.00</strong></p>
+
+        <div class="calc-totals">
+          <p class="calc-total-line">Subtotal: <strong id="calc-subtotal">$0.00</strong></p>
+          <label class="calc-discount-label">
+            Discount %
+            <input type="number" id="calc-discount" min="0" max="100" step="0.1" value="0" />
+          </label>
+          <p class="calc-total-line">Total: <strong id="calc-total">$0.00</strong></p>
+        </div>
+
         <div class="form-actions">
           <button type="button" class="btn-secondary" id="calc-use-total">Use this total for Amount</button>
           <button type="button" class="btn-secondary" id="calc-insert-description">Insert breakdown into description</button>
+          <button type="button" class="btn-secondary" id="calc-save-template">Save as template</button>
         </div>
       </details>
 
@@ -179,81 +199,99 @@ export function renderOrderDetailView(container, { navigate, orderId }) {
       navigate('personDetail', { personId: order.person_id });
     });
 
-    // ---- Price calculator (client-side only, no DB involved) ----------
+    // ---- Price calculator (rows are client-side only; templates are the
+    // only part of this that touches the DB, via priceTemplate.*) -------
 
-    let calcLines = [];
+    const lineItemRows = createLineItemRows({
+      tbody: container.querySelector('#calc-rows'),
+      onChange: updateCalcTotals,
+    });
 
-    function calcLineSubtotalCents(line) {
-      const rateCents = parseMoneyToCents(line.rate);
-      const qty = Number.parseFloat(line.qty) || 0;
-      return Math.round(rateCents * qty);
+    function discountPercent() {
+      const value = Number.parseFloat(container.querySelector('#calc-discount').value);
+      if (Number.isNaN(value)) return 0;
+      return Math.min(Math.max(value, 0), 100);
     }
 
     function calcTotalCents() {
-      return calcLines.reduce((sum, line) => sum + calcLineSubtotalCents(line), 0);
+      return Math.round(lineItemRows.totalCents() * (1 - discountPercent() / 100));
     }
 
     function updateCalcTotals() {
-      container.querySelectorAll('[data-calc-subtotal]').forEach((cell) => {
-        const index = Number(cell.dataset.calcSubtotal);
-        cell.textContent = formatMoney(calcLineSubtotalCents(calcLines[index]));
-      });
+      container.querySelector('#calc-subtotal').textContent = formatMoney(lineItemRows.totalCents());
       container.querySelector('#calc-total').textContent = formatMoney(calcTotalCents());
     }
 
-    function renderCalcRows() {
-      const tbody = container.querySelector('#calc-rows');
-      tbody.innerHTML = calcLines
-        .map(
-          (line, index) => `
-          <tr>
-            <td><input type="text" data-calc-index="${index}" data-calc-field="label" value="${escapeHtml(line.label)}" placeholder="e.g. Custom video" /></td>
-            <td><input type="number" data-calc-index="${index}" data-calc-field="rate" value="${escapeHtml(line.rate)}" step="0.01" min="0" placeholder="0.00" /></td>
-            <td><input type="number" data-calc-index="${index}" data-calc-field="qty" value="${escapeHtml(line.qty)}" step="0.01" min="0" placeholder="0" /></td>
-            <td data-calc-subtotal="${index}">${formatMoney(calcLineSubtotalCents(line))}</td>
-            <td><button type="button" class="danger" data-calc-remove="${index}">Remove</button></td>
-          </tr>`
-        )
-        .join('');
-
-      // Update state + just the affected cells on every keystroke, rather
-      // than re-rendering the whole table -- re-rendering would recreate
-      // the <input> elements and kick focus out mid-typing.
-      tbody.querySelectorAll('[data-calc-field]').forEach((input) => {
-        input.addEventListener('input', () => {
-          const index = Number(input.dataset.calcIndex);
-          calcLines[index][input.dataset.calcField] = input.value;
-          updateCalcTotals();
-        });
-      });
-
-      tbody.querySelectorAll('[data-calc-remove]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          calcLines.splice(Number(btn.dataset.calcRemove), 1);
-          renderCalcRows();
-        });
-      });
-
-      updateCalcTotals();
-    }
-
     function calcBreakdownText() {
-      const itemLines = calcLines
+      const itemLines = lineItemRows
+        .getLines()
         .filter((line) => line.label || line.rate || line.qty)
         .map((line) => {
           const qty = line.qty || '0';
           const rate = formatMoney(parseMoneyToCents(line.rate));
-          const subtotal = formatMoney(calcLineSubtotalCents(line));
+          const subtotal = formatMoney(Math.round(parseMoneyToCents(line.rate) * (Number.parseFloat(line.qty) || 0)));
           return `${line.label || 'Item'} — ${qty} × ${rate} = ${subtotal}`;
         });
+      itemLines.push(`Subtotal: ${formatMoney(lineItemRows.totalCents())}`);
+      const discount = discountPercent();
+      if (discount > 0) itemLines.push(`Discount: ${discount}%`);
       itemLines.push(`Total: ${formatMoney(calcTotalCents())}`);
       return itemLines.join('\n');
     }
 
-    container.querySelector('#calc-add-row').addEventListener('click', () => {
-      calcLines.push({ label: '', rate: '', qty: '' });
-      renderCalcRows();
+    // The order's currently-selected platform account (read live from
+    // the <select>, not the saved order -- so switching it before saving
+    // already affects which templates sort first below).
+    function currentPlatformName() {
+      const account = accounts.find((a) => a.id === Number(container.querySelector('#order-account').value));
+      return account ? account.platform_name : '';
+    }
+
+    let allTemplates = [];
+
+    async function loadTemplateOptions() {
+      allTemplates = await window.api.priceTemplate.listAll();
+      const platform = currentPlatformName();
+
+      // Templates for this order's own platform sort first, so the
+      // relevant ones are right at the top instead of buried
+      // alphabetically among every other platform's.
+      const sorted = [...allTemplates].sort((a, b) => {
+        const aMatches = a.platform_name === platform ? 0 : 1;
+        const bMatches = b.platform_name === platform ? 0 : 1;
+        if (aMatches !== bMatches) return aMatches - bMatches;
+        return `${a.platform_name} ${a.label}`.localeCompare(`${b.platform_name} ${b.label}`);
+      });
+
+      container.querySelector('#calc-template-select').innerHTML = `
+        <option value="">-- Select a template --</option>
+        ${sorted.map((t) => `<option value="${t.id}">${escapeHtml(t.platform_name)} — ${escapeHtml(t.label)}</option>`).join('')}
+      `;
+    }
+
+    container.querySelector('#calc-template-select').addEventListener('change', (event) => {
+      const select = event.currentTarget;
+      const templateId = Number(select.value);
+      if (!templateId) return;
+
+      if (lineItemRows.getLines().length > 0 && !confirm('Replace the current calculator lines with this template?')) {
+        select.value = '';
+        return;
+      }
+
+      const template = allTemplates.find((t) => t.id === templateId);
+      select.value = '';
+      if (!template) return;
+
+      lineItemRows.setLines(template.items);
+      container.querySelector('#calc-discount').value = template.default_discount_percent || 0;
+      updateCalcTotals();
     });
+
+    container.querySelector('#order-account').addEventListener('change', loadTemplateOptions);
+    container.querySelector('#calc-discount').addEventListener('input', updateCalcTotals);
+
+    container.querySelector('#calc-add-row').addEventListener('click', () => lineItemRows.addLine());
 
     container.querySelector('#calc-use-total').addEventListener('click', () => {
       container.querySelector('#order-amount').value = (calcTotalCents() / 100).toFixed(2);
@@ -265,7 +303,52 @@ export function renderOrderDetailView(container, { navigate, orderId }) {
       textarea.value = textarea.value.trim() ? `${textarea.value}\n\n${breakdown}` : breakdown;
     });
 
-    renderCalcRows();
+    // Captures the calculator's current rows + discount as a new,
+    // reusable template -- the quick-save counterpart to "Load template"
+    // above; the full library (rename/edit/delete) lives in Settings'
+    // "Price templates" card.
+    container.querySelector('#calc-save-template').addEventListener('click', () => {
+      const lines = lineItemRows.getLines().filter((line) => line.label || line.rate || line.qty);
+      if (lines.length === 0) {
+        alert('Add at least one line before saving a template.');
+        return;
+      }
+
+      openModal({
+        title: 'Save as price template',
+        render: (body, close) => {
+          body.innerHTML = `
+            <form id="save-template-form">
+              <label>Platform <input type="text" id="template-platform" value="${escapeHtml(currentPlatformName())}" required /></label>
+              <label>Label <input type="text" id="template-label" placeholder="e.g. Custom video" required /></label>
+              <div class="form-actions">
+                <button type="submit">Save</button>
+              </div>
+            </form>
+          `;
+          body.querySelector('#save-template-form').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            await window.api.priceTemplate.create({
+              platformName: body.querySelector('#template-platform').value,
+              label: body.querySelector('#template-label').value,
+              defaultDiscountPercent: discountPercent(),
+              items: lines.map((line) => ({
+                label: line.label,
+                rateCents: parseMoneyToCents(line.rate),
+                defaultQty: Number.parseFloat(line.qty) || 0,
+              })),
+            });
+            close();
+            showToast('Template saved.');
+            await loadTemplateOptions();
+          });
+        },
+      });
+    });
+
+    lineItemRows.render();
+    updateCalcTotals();
+    await loadTemplateOptions();
 
     // ---- Payment-method suggestions -------------------------------------
 

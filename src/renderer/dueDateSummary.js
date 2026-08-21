@@ -53,7 +53,9 @@ export async function maybeShowDueDateSummary(navigate) {
   document.body.appendChild(overlay);
 }
 
-function renderBucket(title, orders, severity) {
+// Exported so views/dashboard.js can render the same missed/due-today/
+// due-soon buckets without duplicating this markup.
+export function renderBucket(title, orders, severity) {
   if (orders.length === 0) return '';
   return `
     <div class="due-summary-bucket due-summary-${severity}">

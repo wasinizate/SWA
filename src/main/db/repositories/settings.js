@@ -10,6 +10,7 @@ const DEFAULT_ORDER_DUE_REMINDER_ENABLED = true;
 const DEFAULT_ORDER_DUE_REMINDER_DAYS_BEFORE = 1;
 const DEFAULT_SHOW_DUE_SUMMARY_ON_OPEN = true;
 const DEFAULT_THEME = 'default';
+const DEFAULT_QUIET_CLIENT_THRESHOLD_DAYS = 30;
 
 // Small internal helpers shared by every setting below -- app_settings is
 // a plain key/value table (see 0001_init.sql), so every getter/setter
@@ -71,6 +72,29 @@ function setTheme(theme) {
   setSetting('theme', theme);
 }
 
+// Freeform text for the Dashboard's notes scratchpad -- not tied to any
+// client/order, just one more small piece of app state, same reasoning
+// as everything else in this table (see 0001_init.sql's comment).
+function getDashboardNote() {
+  return getSetting('dashboard_note', '');
+}
+
+function setDashboardNote(note) {
+  setSetting('dashboard_note', note);
+}
+
+// How many days without a new order before the Clients list/Dashboard
+// flag a client as "haven't heard from" -- see order.js's
+// listLastOrderDateByPerson(), which supplies the other half of that
+// comparison.
+function getQuietClientThresholdDays() {
+  return Number(getSetting('quiet_client_threshold_days', DEFAULT_QUIET_CLIENT_THRESHOLD_DAYS));
+}
+
+function setQuietClientThresholdDays(days) {
+  setSetting('quiet_client_threshold_days', days);
+}
+
 module.exports = {
   DEFAULT_IDLE_TIMEOUT_SECONDS,
   getIdleTimeoutSeconds,
@@ -84,4 +108,8 @@ module.exports = {
   DEFAULT_THEME,
   getTheme,
   setTheme,
+  getDashboardNote,
+  setDashboardNote,
+  getQuietClientThresholdDays,
+  setQuietClientThresholdDays,
 };

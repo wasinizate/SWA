@@ -2,30 +2,12 @@
 // opt-in quick-unlock toggle, appearance (theme), and changing the vault
 // passphrase.
 
-import { escapeHtml, formatMoney, orderStatusLabel, previewText, loadingHtml } from '../helpers.js';
+import { escapeHtml, loadingHtml, parseMoneyToCents } from '../helpers.js';
 import { THEMES, applyTheme, getCurrentTheme } from '../theme.js';
 import { showToast } from '../toast.js';
-
-// Formats a single diff value for display in the Import card's
-// change list (renderImportPreview() below) -- money/status get their
-// usual display treatment, long text fields get truncated so one
-// changed description doesn't blow out the list.
-function formatDiffValue(fieldKey, value) {
-  if (value === null || value === undefined || value === '') return '(empty)';
-  if (fieldKey === 'amountCents') return formatMoney(value);
-  if (fieldKey === 'status') return orderStatusLabel(value);
-  if (['description', 'feedbackNotes', 'generalNotes', 'screeningNotes'].includes(fieldKey)) return previewText(value, 60);
-  return String(value);
-}
-
-function renderChangesList(changes) {
-  return `<ul class="import-changes-list">${Object.entries(changes)
-    .map(
-      ([key, c]) =>
-        `<li>${escapeHtml(c.label)}: ${escapeHtml(formatDiffValue(key, c.local))} &rarr; ${escapeHtml(formatDiffValue(key, c.incoming))}</li>`
-    )
-    .join('')}</ul>`;
-}
+import { renderImportPanel } from '../importPanel.js';
+import { openModal } from '../modal.js';
+import { createLineItemRows } from '../lineItemRows.js';
 
 // Accepts { navigate } for signature consistency with every other view
 // (shell.js always passes it) -- not currently used here since this
@@ -90,19 +72,20 @@ export function renderSettingsView(container, { navigate } = {}) {
 
     <section class="card">
       <h2>Import</h2>
-      <p class="hint">
-        Import a client or order exported from another install of this
-        app (see "Export client"/"Export order" on a client's or order's
-        own page) -- you'll need the passphrase whoever exported it
-        chose, not their vault passphrase.
-      </p>
-      <div class="inline-form">
-        <input type="file" id="import-file-input" accept=".swaexport" />
-        <input type="password" id="import-passphrase" placeholder="Passphrase" />
-        <button type="button" id="import-preview-btn" class="btn-secondary">Preview</button>
+      <div id="import-panel-body"></div>
+    </section>
+
+    <section class="card">
+      <div class="section-header">
+        <h2>Price templates</h2>
+        <button type="button" class="btn-secondary" id="new-price-template-btn">+ New template</button>
       </div>
-      <div id="import-preview-body"></div>
-      <p class="error" id="import-error" hidden></p>
+      <p class="hint">
+        Reusable, per-platform sets of price-calculator line items -- save
+        a common breakdown once (see an order's "Price calculator"), then
+        load it into any order instead of retyping it.
+      </p>
+      <div id="price-template-list-body">${loadingHtml()}</div>
     </section>
 
     <section class="card">
@@ -133,6 +116,8 @@ export function renderSettingsView(container, { navigate } = {}) {
     renderAutoLock(timeoutSeconds);
     renderOrderReminder(orderReminderConfig);
     renderQuickUnlock(status.quickUnlockEnabled);
+    renderImportPanel(container.querySelector('#import-panel-body'));
+    refreshPriceTemplates();
 
     // Already applied to the page by shell.js at boot -- this just marks
     // which swatch matches what's currently live, no extra IPC call.
@@ -266,125 +251,116 @@ export function renderSettingsView(container, { navigate } = {}) {
     btn.disabled = false;
   });
 
-  // ---- Import (cross-instance export/import, see dataExchangeIpc.js) --
+  // ---- Price templates -------------------------------------------------
 
-  let pendingImportFileContents = null;
+  async function refreshPriceTemplates() {
+    const templates = await window.api.priceTemplate.listAll();
+    const body = container.querySelector('#price-template-list-body');
 
-  container.querySelector('#import-preview-btn').addEventListener('click', async () => {
-    const errorEl = container.querySelector('#import-error');
-    const previewBody = container.querySelector('#import-preview-body');
-    errorEl.hidden = true;
-    previewBody.innerHTML = '';
+    body.innerHTML = templates.length
+      ? `
+        <table class="data-table">
+          <thead><tr><th>Platform</th><th>Label</th><th>Items</th><th>Default discount</th><th></th></tr></thead>
+          <tbody>
+            ${templates
+              .map(
+                (t) => `
+              <tr>
+                <td>${escapeHtml(t.platform_name)}</td>
+                <td>${escapeHtml(t.label)}</td>
+                <td>${t.items.length}</td>
+                <td>${t.default_discount_percent ? `${t.default_discount_percent}%` : '—'}</td>
+                <td class="row-actions">
+                  <button type="button" class="btn-secondary btn-sm" data-edit-template="${t.id}">Edit</button>
+                  <button type="button" class="danger btn-sm" data-delete-template="${t.id}">Delete</button>
+                </td>
+              </tr>`
+              )
+              .join('')}
+          </tbody>
+        </table>`
+      : '<p class="muted">No price templates yet.</p>';
 
-    const fileInput = container.querySelector('#import-file-input');
-    const passphrase = container.querySelector('#import-passphrase').value;
-    const file = fileInput.files[0];
-    if (!file) {
-      errorEl.textContent = 'Choose a file first.';
-      errorEl.hidden = false;
-      return;
-    }
-
-    try {
-      pendingImportFileContents = await file.text();
-      const preview = await window.api.dataExchange.previewImport(pendingImportFileContents, passphrase);
-      renderImportPreview(preview, passphrase);
-    } catch (err) {
-      errorEl.textContent = err.message;
-      errorEl.hidden = false;
-    }
-  });
-
-  function renderImportPreview(preview, passphrase) {
-    const previewBody = container.querySelector('#import-preview-body');
-
-    const orderSummary = `${preview.newOrderCount} new order(s)${preview.updates.length > 0 ? `, ${preview.updates.length} with changes` : ''}`;
-
-    const hasPersonChanges = preview.personChanges && Object.keys(preview.personChanges).length > 0;
-    const hasChanges = hasPersonChanges || preview.updates.length > 0;
-
-    // Shown for both the resolved and (once a client's picked, after
-    // re-preview) unresolved-going-resolved cases -- but only actually
-    // populated when resolved, since there's nothing to diff against
-    // until a local client is known (see previewImport()).
-    const changesHtml = `
-      ${
-        hasPersonChanges
-          ? `<div class="import-change-block"><strong>Client details</strong>${renderChangesList(preview.personChanges)}</div>`
-          : ''
-      }
-      ${preview.updates
-        .map(
-          (u) => `
-        <div class="import-change-block">
-          <strong>Order changes</strong>
-          ${renderChangesList(u.changes)}
-          ${u.newAttachmentCount > 0 ? `<p class="hint">+ ${u.newAttachmentCount} new attachment(s)</p>` : ''}
-        </div>`
-        )
-        .join('')}
-    `;
-
-    const applyUpdatesCheckboxHtml = hasChanges
-      ? `<label class="checkbox-label"><input type="checkbox" id="import-apply-updates" checked /> Apply these updates</label>`
-      : '';
-
-    if (preview.resolved) {
-      previewBody.innerHTML = `
-        <p class="hint">This will attach ${orderSummary} to your existing client "${escapeHtml(preview.resolvedPersonLabel)}".</p>
-        ${changesHtml}
-        ${applyUpdatesCheckboxHtml}
-        <button type="button" id="import-confirm-btn">Import</button>
-      `;
-      previewBody.querySelector('#import-confirm-btn').addEventListener('click', () => {
-        const applyUpdates = hasChanges ? previewBody.querySelector('#import-apply-updates').checked : true;
-        runImport(passphrase, { attachToPersonId: preview.resolvedPersonId, applyUpdates });
+    body.querySelectorAll('[data-edit-template]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const template = templates.find((t) => t.id === Number(btn.dataset.editTemplate));
+        openPriceTemplateModal(template);
       });
-      return;
-    }
+    });
 
-    previewBody.innerHTML = `
-      <p class="hint">
-        This export is for "${escapeHtml(preview.personLabel)}" (${orderSummary}), which isn't linked to
-        a client in your system yet. Attach it to an existing client, or create a new one --
-        whichever you pick is remembered, so future imports for this same client (in either
-        direction) attach automatically from now on.
-      </p>
-      <label>
-        Attach to
-        <select id="import-person-select">
-          <option value="new">-- Create as new client --</option>
-          ${preview.people.map((p) => `<option value="${p.id}">${escapeHtml(p.private_label)}</option>`).join('')}
-        </select>
-      </label>
-      <button type="button" id="import-confirm-btn">Import</button>
-    `;
-    previewBody.querySelector('#import-confirm-btn').addEventListener('click', () => {
-      const selected = previewBody.querySelector('#import-person-select').value;
-      const resolution = selected === 'new' ? { createNew: true } : { attachToPersonId: Number(selected) };
-      runImport(passphrase, resolution);
+    body.querySelectorAll('[data-delete-template]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this price template?')) return;
+        await window.api.priceTemplate.delete(Number(btn.dataset.deleteTemplate));
+        await refreshPriceTemplates();
+      });
     });
   }
 
-  async function runImport(passphrase, resolution) {
-    const errorEl = container.querySelector('#import-error');
-    const previewBody = container.querySelector('#import-preview-body');
-    errorEl.hidden = true;
+  // `template` is null for "+ New template", or an existing template
+  // (with its .items) for Edit -- same optional-source pattern as
+  // calendar.js's openEventModal().
+  function openPriceTemplateModal(template) {
+    const isEditing = Boolean(template);
 
-    try {
-      const result = await window.api.dataExchange.applyImport(pendingImportFileContents, passphrase, resolution);
-      const parts = [`${result.ordersImported} new order(s)`];
-      if (result.ordersUpdated > 0) parts.push(`${result.ordersUpdated} updated`);
-      if (result.attachmentsAdded > 0) parts.push(`${result.attachmentsAdded} new attachment(s)`);
-      previewBody.innerHTML = `<p class="hint">Imported to "${escapeHtml(result.personLabel)}": ${parts.join(', ')}.</p>`;
-      container.querySelector('#import-file-input').value = '';
-      container.querySelector('#import-passphrase').value = '';
-      pendingImportFileContents = null;
-    } catch (err) {
-      errorEl.textContent = err.message;
-      errorEl.hidden = false;
-    }
+    openModal({
+      title: isEditing ? 'Edit price template' : 'New price template',
+      wide: true,
+      render: (body, close) => {
+        body.innerHTML = `
+          <form id="price-template-form">
+            <div class="inline-form">
+              <input type="text" id="pt-platform" placeholder="Platform (e.g. OnlyFans)" value="${isEditing ? escapeHtml(template.platform_name) : ''}" required />
+              <input type="text" id="pt-label" placeholder="Label (e.g. Custom video)" value="${isEditing ? escapeHtml(template.label) : ''}" required />
+              <label>
+                Default discount %
+                <input type="number" id="pt-discount" min="0" max="100" step="0.1" value="${isEditing ? template.default_discount_percent : 0}" />
+              </label>
+            </div>
+            <table class="data-table">
+              <thead><tr><th>Item</th><th>Rate ($/unit)</th><th>Default qty</th><th>Subtotal</th><th></th></tr></thead>
+              <tbody id="pt-rows"></tbody>
+            </table>
+            <button type="button" class="btn-secondary btn-sm" id="pt-add-row">Add line</button>
+            <div class="form-actions">
+              <button type="submit">Save template</button>
+            </div>
+          </form>
+        `;
+
+        const rows = createLineItemRows({ tbody: body.querySelector('#pt-rows') });
+        if (isEditing) rows.setLines(template.items);
+
+        body.querySelector('#pt-add-row').addEventListener('click', () => rows.addLine());
+
+        body.querySelector('#price-template-form').addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const lines = rows.getLines().filter((line) => line.label || line.rate || line.qty);
+          const payload = {
+            platformName: body.querySelector('#pt-platform').value,
+            label: body.querySelector('#pt-label').value,
+            defaultDiscountPercent: Number.parseFloat(body.querySelector('#pt-discount').value) || 0,
+            items: lines.map((line) => ({
+              label: line.label,
+              rateCents: parseMoneyToCents(line.rate),
+              defaultQty: Number.parseFloat(line.qty) || 0,
+            })),
+          };
+
+          if (isEditing) {
+            await window.api.priceTemplate.update(template.id, payload);
+          } else {
+            await window.api.priceTemplate.create(payload);
+          }
+          close();
+          showToast('Template saved.');
+          await refreshPriceTemplates();
+        });
+      },
+    });
   }
+
+  container.querySelector('#new-price-template-btn').addEventListener('click', () => openPriceTemplateModal(null));
 
   container.querySelector('#change-form').addEventListener('submit', async (event) => {
     event.preventDefault();

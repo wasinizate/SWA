@@ -110,27 +110,84 @@ export function createAttachmentGrid({ gridEl, inputEl, api, onChange }) {
     });
   }
 
-  if (inputEl) {
+  // Shared by both the file-input `change` handler and the paste handler
+  // below -- same per-file size check/upload/error-alert either way, the
+  // only difference is where the FileList came from.
+  async function addFiles(files) {
+    if (files.length === 0) return;
+
+    for (const file of files) {
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        alert(`"${file.name}" is too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). The limit is 20MB per file.`);
+        continue;
+      }
+      const buffer = await file.arrayBuffer();
+      try {
+        await api.add({ fileName: file.name, mimeType: file.type || 'application/octet-stream', data: new Uint8Array(buffer) });
+      } catch (err) {
+        alert(`Failed to attach "${file.name}": ${err.message}`);
+      }
+    }
+
+    await refresh();
+    if (onChange) onChange();
+  }
+
+  // expenses.js can call createAttachmentGrid() again on the *same*
+  // still-mounted <input>/<div> (opening a statement row's attachments
+  // twice without an add/delete rebuilding that row's markup in between)
+  // -- guard both wiring blocks below so a second call doesn't stack a
+  // second set of listeners on top of the first, which would silently
+  // upload/paste every file multiple times.
+  if (inputEl && !inputEl.dataset.attachmentGridWired) {
+    inputEl.dataset.attachmentGridWired = 'true';
     inputEl.addEventListener('change', async (event) => {
       const files = Array.from(event.target.files || []);
       event.target.value = ''; // allow re-selecting the same file(s) later
-      if (files.length === 0) return;
+      await addFiles(files);
+    });
+  }
 
-      for (const file of files) {
-        if (file.size > MAX_ATTACHMENT_BYTES) {
-          alert(`"${file.name}" is too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). The limit is 20MB per file.`);
-          continue;
-        }
-        const buffer = await file.arrayBuffer();
-        try {
-          await api.add({ fileName: file.name, mimeType: file.type || 'application/octet-stream', data: new Uint8Array(buffer) });
-        } catch (err) {
-          alert(`Failed to attach "${file.name}": ${err.message}`);
-        }
-      }
+  // Clipboard sources differ slightly by OS/tool -- some populate
+  // clipboardData.files directly (same shape as a drag-drop), others
+  // only populate .items with a file-kind entry that needs getAsFile().
+  // Tries the direct path first since it's the common case.
+  function filesFromClipboard(clipboardData) {
+    if (!clipboardData) return [];
+    if (clipboardData.files && clipboardData.files.length > 0) return Array.from(clipboardData.files);
+    return Array.from(clipboardData.items || [])
+      .filter((item) => item.kind === 'file')
+      .map((item) => item.getAsFile())
+      .filter(Boolean);
+  }
 
-      await refresh();
-      if (onChange) onChange();
+  if (gridEl && !gridEl.dataset.attachmentGridWired) {
+    gridEl.dataset.attachmentGridWired = 'true';
+
+    // Paste only reaches whichever element currently has focus, so the
+    // grid needs to be focusable -- tabIndex makes a plain <div> a valid
+    // paste target once clicked. A one-time hint above the grid (rather
+    // than baked into refresh()'s own markup, which gets replaced on
+    // every render) makes that discoverable without extra state to track.
+    gridEl.tabIndex = 0;
+    gridEl.insertAdjacentHTML('beforebegin', '<p class="hint">Click here, then press Ctrl+V to paste a screenshot.</p>');
+
+    gridEl.addEventListener('paste', async (event) => {
+      const rawFiles = filesFromClipboard(event.clipboardData);
+      if (rawFiles.length === 0) return;
+      event.preventDefault();
+
+      // A pasted image often has a generic/empty name (varies by OS) --
+      // fall back to something identifiable, with the loop index folded
+      // in so pasting several images at once can't collide on the same
+      // generated name.
+      const files = rawFiles.map((file, index) => {
+        if (file.name) return file;
+        const ext = (file.type.split('/')[1] || 'png').split('+')[0];
+        return new File([file], `pasted-image-${Date.now()}-${index}.${ext}`, { type: file.type });
+      });
+
+      await addFiles(files);
     });
   }
 

@@ -45,6 +45,26 @@ function registerSettingsIpc() {
     settingsRepo.setTheme(theme);
     return theme;
   });
+
+  ipcMain.handle('settings:getDashboardNote', () => {
+    if (!connection.isOpen()) return null;
+    return settingsRepo.getDashboardNote();
+  });
+
+  ipcMain.handle('settings:setDashboardNote', (_event, note) => {
+    settingsRepo.setDashboardNote(note);
+    return note;
+  });
+
+  ipcMain.handle('settings:getQuietClientThresholdDays', () => {
+    if (!connection.isOpen()) return null;
+    return settingsRepo.getQuietClientThresholdDays();
+  });
+
+  ipcMain.handle('settings:setQuietClientThresholdDays', (_event, days) => {
+    settingsRepo.setQuietClientThresholdDays(days);
+    return days;
+  });
 }
 
 module.exports = { registerSettingsIpc };

@@ -177,3 +177,25 @@ export const SEARCH_MIN_QUERY_LENGTH = 2;
 export function loadingHtml(label = 'Loading…') {
   return `<p class="loading-state">${escapeHtml(label)}</p>`;
 }
+
+// Whole days elapsed since an ISO-8601 timestamp -- plain elapsed-time
+// arithmetic, not a calendar-day comparison, so this doesn't carry the
+// date-only-field timezone risk called out elsewhere in this codebase
+// (see helpers.js's toDatetimeLocalValue() comments). Returns null for
+// a missing timestamp (e.g. a client with no orders yet) so callers can
+// tell "never" apart from "today" (0).
+export function daysSince(isoString) {
+  if (!isoString) return null;
+  const then = new Date(isoString).getTime();
+  if (Number.isNaN(then)) return null;
+  return Math.max(0, Math.floor((Date.now() - then) / (1000 * 60 * 60 * 24)));
+}
+
+// Shared by people.js's "Last order" column and dashboard.js's "Quiet
+// clients" stat, so both describe the same gap the same way.
+export function formatDaysSince(days) {
+  if (days === null || days === undefined) return 'Never';
+  if (days === 0) return 'Today';
+  if (days === 1) return '1 day ago';
+  return `${days} days ago`;
+}

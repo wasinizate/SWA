@@ -25,16 +25,17 @@ function create({
   type = '',
   notes = '',
   reminderMinutesBefore = null,
+  priority = 'normal',
 }) {
   if (!title || !title.trim()) throw new Error('title is required.');
   if (!startDatetime) throw new Error('startDatetime is required.');
 
   const result = getDb()
     .prepare(
-      `INSERT INTO calendar_events (linked_order_id, title, start_datetime, end_datetime, all_day, type, notes, reminder_minutes_before)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO calendar_events (linked_order_id, title, start_datetime, end_datetime, all_day, type, notes, reminder_minutes_before, priority)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(linkedOrderId, title.trim(), startDatetime, endDatetime, allDay ? 1 : 0, type, notes, reminderMinutesBefore);
+    .run(linkedOrderId, title.trim(), startDatetime, endDatetime, allDay ? 1 : 0, type, notes, reminderMinutesBefore, priority);
   return get(result.lastInsertRowid);
 }
 
@@ -54,7 +55,7 @@ function update(id, fields) {
     .prepare(
       `UPDATE calendar_events SET
          linked_order_id = ?, title = ?, start_datetime = ?, end_datetime = ?,
-         all_day = ?, type = ?, notes = ?, reminder_minutes_before = ?, reminder_fired_at = ?
+         all_day = ?, type = ?, notes = ?, reminder_minutes_before = ?, reminder_fired_at = ?, priority = ?
        WHERE id = ?`
     )
     .run(
@@ -67,6 +68,7 @@ function update(id, fields) {
       merged.notes,
       merged.reminderMinutesBefore,
       reminderFiredAt,
+      merged.priority,
       id
     );
   return get(id);
@@ -103,6 +105,7 @@ function toCamel(row) {
     type: row.type,
     notes: row.notes,
     reminderMinutesBefore: row.reminder_minutes_before,
+    priority: row.priority,
   };
 }
 

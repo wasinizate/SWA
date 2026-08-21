@@ -225,6 +225,29 @@ function getSlatedIncomeTotals() {
   return { totalCents, orders };
 }
 
+// Count of orders still "in flight" -- same NOT IN ('completed','cancelled')
+// definition getDueDateSummary() already uses to decide what's still
+// relevant to a due-date digest. Used by the Dashboard's "Open orders"
+// stat card.
+function getOpenOrderCount() {
+  return getDb()
+    .prepare(`SELECT COUNT(*) AS count FROM orders WHERE status NOT IN ('completed', 'cancelled')`)
+    .get().count;
+}
+
+// Last order date per person (any status -- even an unpaid/pending order
+// still counts as recent contact), for the Clients list's/Dashboard's
+// "haven't heard from" tracking. Grouped into a plain map in JS (no
+// array-agg in better-sqlite3, same approach as tag.js's
+// listGroupedByPerson()) -- a person with zero orders simply has no key
+// here, rather than a null entry.
+function listLastOrderDateByPerson() {
+  const rows = getDb().prepare('SELECT person_id, MAX(created_at) AS last_order_at FROM orders GROUP BY person_id').all();
+  const map = {};
+  for (const row of rows) map[row.person_id] = row.last_order_at;
+  return map;
+}
+
 // Same all-time/by-year/by-month shape as getTotalsByPerson(), but
 // across every person -- needed by the Expenses page's business-wide
 // "confirmed income" figure, which has no single person to scope to.
@@ -301,6 +324,8 @@ module.exports = {
   listWithDeliveryDueDates,
   markDueReminderNotified,
   getDueDateSummary,
+  getOpenOrderCount,
+  listLastOrderDateByPerson,
   getSlatedIncomeTotals,
   getTotalsAll,
   getByExternalId,

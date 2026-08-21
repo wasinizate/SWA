@@ -3,8 +3,10 @@
 // its "See all N results" row (or a double-click on the search box) for
 // the complete list -- this page isn't reachable from its own nav item.
 //
-// Results link straight to the existing Person/Order detail pages (not a
-// calendar deep link) -- see ROADMAP.md for why.
+// Order results link to the order's own detail page as before; an order
+// with a delivery due date (the only kind that shows up on the Calendar
+// at all -- see calendar.js's listWithDeliveryDueDates merge) also gets a
+// small calendar shortcut that jumps the Calendar view to that date.
 
 import { escapeHtml, formatMoney, previewText, orderStatusLabel, SEARCH_MIN_QUERY_LENGTH } from '../helpers.js';
 
@@ -67,7 +69,7 @@ export function renderSearchView(container, { navigate, query: initialQuery }) {
         : `
       <h2>Orders (${orders.length})</h2>
       <table class="data-table">
-        <thead><tr><th>#</th><th>Client</th><th>Date paid</th><th>Amount</th><th>Status</th><th>Description</th></tr></thead>
+        <thead><tr><th>#</th><th>Client</th><th>Date paid</th><th>Amount</th><th>Status</th><th>Description</th><th></th></tr></thead>
         <tbody>
           ${orders
             .map(
@@ -79,6 +81,11 @@ export function renderSearchView(container, { navigate, query: initialQuery }) {
               <td>${formatMoney(o.amount_cents, o.currency)}</td>
               <td>${escapeHtml(orderStatusLabel(o.status))}</td>
               <td><div class="description-preview">${escapeHtml(previewText(o.description))}</div></td>
+              <td>${
+                o.delivery_due_date
+                  ? `<button class="link-button" data-open-calendar="${o.id}" title="View due date on calendar">📅</button>`
+                  : ''
+              }</td>
             </tr>`
             )
             .join('')}
@@ -92,6 +99,9 @@ export function renderSearchView(container, { navigate, query: initialQuery }) {
     });
     resultsEl.querySelectorAll('[data-open-order]').forEach((btn) => {
       btn.addEventListener('click', () => navigate('orderDetail', { orderId: Number(btn.dataset.openOrder) }));
+    });
+    resultsEl.querySelectorAll('[data-open-calendar]').forEach((btn) => {
+      btn.addEventListener('click', () => navigate('calendar', { focusOrderId: Number(btn.dataset.openCalendar) }));
     });
   }
 

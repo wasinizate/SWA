@@ -175,7 +175,8 @@ textarea:focus-visible,
   margin-bottom: 0.75rem;
 }
 
-.section-header h2 {
+.section-header h2,
+.section-header h1 {
   margin-bottom: 0;
 }
 
@@ -585,6 +586,17 @@ hr {
   margin-right: auto;
 }
 
+/* The reading-width cap above is right for text-heavy pages (forms,
+   order tables) but wrong for the Calendar (calendar.js) -- a data grid
+   genuinely benefits from the window's full width, and was previously
+   getting boxed in at a fixed 900px regardless of how large the window
+   actually was. */
+.content > .calendar-page {
+  max-width: none;
+  margin-left: 0;
+  margin-right: 0;
+}
+
 .form-actions {
   display: flex;
   gap: 0.5rem;
@@ -649,6 +661,28 @@ hr {
 
 .calc-total-line {
   margin: 0.6rem 0;
+}
+
+/* Subtotal / Discount % / Total row group -- a plain flex row so the
+   discount input sits inline between the two totals it affects, rather
+   than looking like an unrelated form field bolted on below them. */
+.calc-totals {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.calc-discount-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0;
+}
+
+.calc-discount-label input {
+  width: 70px;
+  margin-top: 0;
 }
 
 /* Client totals: a plain divider rather than a nested card, since it's
@@ -725,6 +759,28 @@ hr {
   color: var(--accent);
 }
 
+/* Dashboard's stat cards (dashboard.js) reuse .income-stat above but are
+   real <button>s that double as navigation shortcuts -- reset back to
+   plain-block styling, then layer a hover/focus treatment so they still
+   read as clickable. */
+.stat-clickable {
+  all: unset;
+  cursor: pointer;
+  display: block;
+  box-sizing: border-box;
+}
+
+.stat-clickable:hover .income-stat-value,
+.stat-clickable:focus-visible .income-stat-value {
+  color: var(--accent);
+}
+
+.stat-clickable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius);
+}
+
 .toolbar {
   display: flex;
   gap: 1.5rem;
@@ -773,6 +829,15 @@ hr {
   flex-wrap: wrap;
   gap: 0.75rem;
   margin-top: 0.75rem;
+  border-radius: var(--radius);
+}
+
+/* attachmentGrid.js makes the grid itself a paste target (tabIndex) --
+   this focus ring is the only visual cue that it's paste-ready, so it
+   needs to be clearly visible, not the browser's default outline. */
+.attachment-grid:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* Expandable attachment panel embedded inline under an income statement
@@ -907,6 +972,14 @@ hr {
   margin-top: 0;
 }
 
+/* Wider variant for content with more going on (e.g. the Import modals
+   opened from people.js/orders.js via src/renderer/modal.js), where the
+   default 480px feels cramped once an import preview's change list is
+   showing. */
+.modal-wide {
+  max-width: 640px;
+}
+
 /* Non-blocking toast notifications (toast.js) -- replaces alert() for
    routine success messages. Bottom-corner stack, fades in/out; a manual
    dismiss (x) since some messages (a saved file's path) are worth
@@ -970,6 +1043,14 @@ hr {
   color: var(--danger);
 }
 
+/* Clients list's "Last order" column (people.js) -- flags a client past
+   the quiet-client threshold without needing a whole extra column or
+   icon, same lightweight treatment as the due-summary severities above. */
+.quiet-client {
+  color: var(--warning);
+  font-weight: 600;
+}
+
 .due-summary-amber h3 {
   color: var(--warning);
 }
@@ -1000,15 +1081,85 @@ hr {
    from these --fc-classic-* custom properties -- a different naming
    scheme than older FullCalendar versions used. It already ships a
    built-in dark palette, activated by the data-color-scheme="dark"
-   attribute set on this element in calendar.js; these overrides just
-   swap its default blue accent for this app's own accent color. */
+   attribute set on this element in calendar.js; these overrides swap its
+   own hardcoded defaults for this app's own theme tokens throughout --
+   not just the accent color -- so the grid reads as part of the app
+   instead of a dropped-in third-party widget, and its grid lines match
+   the same soft --border tone used everywhere else instead of the
+   theme's own harsher default gray. Deliberately NOT overridden: the
+   ordinary (non-active) toolbar button colors -- their foreground color
+   variable is shared with the "strong"/accent-colored active button, so
+   changing one to match .btn-secondary's transparent look would break
+   the other's text contrast. FullCalendar's own dark-mode palette
+   already keeps those readable against this app's dark themes.
+   color-mix() below is already used natively by FullCalendar's own
+   theme CSS, so it's a safe baseline to build on. */
 #calendar-mount {
   --fc-classic-primary: var(--accent);
   --fc-classic-button-strong: var(--accent);
   --fc-classic-button-strong-border: var(--accent);
+
+  --fc-classic-border: var(--border);
+  --fc-classic-strong-border: color-mix(in srgb, var(--border) 60%, var(--text) 40%);
+  --fc-classic-background: var(--surface);
+  --fc-classic-foreground: var(--text);
+  --fc-classic-muted-foreground: var(--text-muted);
+  --fc-classic-faint-foreground: var(--text-muted);
+
+  /* "Today" highlight -- was a fixed yellow tint regardless of theme;
+     tied to each theme's own accent so OnlyFans/Fansly/Sakura's "today"
+     cell matches their branding instead of one hardcoded color. */
+  --fc-classic-today: color-mix(in srgb, var(--accent) 15%, transparent);
+
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1rem;
+}
+
+/* Marks the day a Search-result deep link (search.js -> calendar.js's
+   focusOrderId) landed on -- an inset ring rather than a background fill
+   so it doesn't fight FullCalendar's own "today" highlight if the two
+   ever coincide. */
+.calendar-target-day {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* Client tags (personDetail.js's "Tags" card, people.js's list column) --
+   small pills. .tag-chip-remove is only present in the editable version
+   on personDetail.js; the read-only chips on the Clients list reuse
+   .tag-chip alone. */
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.tag-chip-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0 0.15rem;
+  margin: 0 -0.2rem 0 0.1rem;
+}
+
+.tag-chip-remove:hover {
+  color: var(--danger);
 }
 
 /* Theme picker (Settings > Appearance, settings.js). Each swatch previews
