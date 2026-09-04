@@ -61,6 +61,28 @@ function close() {
   }
 }
 
+// Opens `filePath` on a short-lived, separate connection (SQLite allows
+// concurrent reader connections to one file, so this never touches the
+// live singleton above) and runs the same "force a real read" probe
+// open() uses to detect a wrong passphrase, then closes it. Throws with
+// a message that deliberately doesn't distinguish "wrong passphrase"
+// from "not a valid database" -- no need to leak which failure mode
+// occurred. Shared by restoreBackup.js (validating a chosen backup file)
+// and passphrase.js's recovery-phrase setup (confirming the caller
+// actually knows the current passphrase before wrapping it).
+function verifyPassphraseAgainstFile(filePath, passphrase) {
+  let instance;
+  try {
+    instance = new Database(filePath, { fileMustExist: true });
+    instance.pragma(`key='${escapeForPragma(passphrase)}'`);
+    instance.prepare('SELECT count(*) FROM sqlite_master').get();
+  } catch (err) {
+    throw new Error('Incorrect passphrase, or the file is not a valid backup.');
+  } finally {
+    if (instance) instance.close();
+  }
+}
+
 function getDb() {
   if (!db) throw new Error('Database is locked.');
   return db;
@@ -74,4 +96,4 @@ function escapeForPragma(value) {
   return String(value).replace(/'/g, "''");
 }
 
-module.exports = { open, close, getDb, isOpen, escapeForPragma };
+module.exports = { open, close, getDb, isOpen, escapeForPragma, getDbPath, verifyPassphraseAgainstFile };

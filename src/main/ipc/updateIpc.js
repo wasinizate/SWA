@@ -2,10 +2,12 @@
 
 const { ipcMain, app, shell } = require('electron');
 const { checkForUpdates, REPO } = require('../updates/checkForUpdates');
+const networkGuard = require('../security/networkGuard');
 
 function registerUpdateIpc() {
   ipcMain.handle('update:check', async () => {
     try {
+      networkGuard.assertNetworkAllowed();
       return await checkForUpdates(app.getVersion());
     } catch (err) {
       return { error: err.message };

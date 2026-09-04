@@ -1,15 +1,16 @@
 // First-launch screen: choose the passphrase that will encrypt the
-// database. There is no "forgot passphrase" flow anywhere in this
-// app -- see the README threat model for why that's a deliberate trade-off.
+// database. There's no OS-level password reset -- an opt-in recovery
+// phrase can be set up afterward in Settings, but by default losing the
+// passphrase means losing the data. See the README threat model.
 
 export function renderSetupView(root, { onComplete }) {
   root.innerHTML = `
     <div class="centered-screen">
       <div class="card">
         <h1>Welcome</h1>
-        <p>Choose a passphrase to encrypt your local database. There is
-        no password reset: if you lose this passphrase, your data cannot
-        be recovered.</p>
+        <p>Choose a passphrase to encrypt your local database. If you
+        lose it, your data cannot be recovered -- unless you set up a
+        recovery phrase afterward in Settings.</p>
         <form id="setup-form">
           <label>
             Passphrase

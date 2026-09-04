@@ -33,16 +33,17 @@ function create({ privateLabel, generalNotes = '', screeningNotes = '' }) {
   return get(result.lastInsertRowid);
 }
 
-function update(id, { privateLabel, generalNotes, screeningNotes }) {
+function update(id, { privateLabel, generalNotes, screeningNotes, isShared }) {
   const existing = get(id);
   if (!existing) throw new Error(`Person ${id} not found.`);
 
   getDb()
-    .prepare('UPDATE persons SET private_label = ?, general_notes = ?, screening_notes = ? WHERE id = ?')
+    .prepare('UPDATE persons SET private_label = ?, general_notes = ?, screening_notes = ?, is_shared = ? WHERE id = ?')
     .run(
       privateLabel !== undefined ? privateLabel.trim() : existing.private_label,
       generalNotes !== undefined ? generalNotes : existing.general_notes,
       screeningNotes !== undefined ? screeningNotes : existing.screening_notes,
+      isShared !== undefined ? (isShared ? 1 : 0) : existing.is_shared,
       id
     );
   return get(id);
@@ -52,6 +53,13 @@ function remove(id) {
   // ON DELETE CASCADE (declared in the schema) takes care of that person's
   // platform_accounts and orders automatically.
   getDb().prepare('DELETE FROM persons WHERE id = ?').run(id);
+}
+
+// Shared-folder sync support (see src/main/sync/) -- every client
+// currently marked shared, all of whose orders get included in that
+// client's periodic export.
+function listShared() {
+  return getDb().prepare('SELECT * FROM persons WHERE is_shared = 1 ORDER BY private_label COLLATE NOCASE').all();
 }
 
 // Cross-instance export/import support (see src/main/dataExchange/) --
@@ -86,4 +94,4 @@ function setExternalId(id, externalId) {
   getDb().prepare('UPDATE persons SET external_id = ? WHERE id = ?').run(externalId, id);
 }
 
-module.exports = { listAll, get, create, update, remove, getByExternalId, ensureExternalId, setExternalId };
+module.exports = { listAll, get, create, update, remove, listShared, getByExternalId, ensureExternalId, setExternalId };

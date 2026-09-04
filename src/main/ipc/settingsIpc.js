@@ -65,6 +65,16 @@ function registerSettingsIpc() {
     settingsRepo.setQuietClientThresholdDays(days);
     return days;
   });
+
+  ipcMain.handle('settings:getNetworkAccessEnabled', () => {
+    if (!connection.isOpen()) return null;
+    return settingsRepo.getNetworkAccessEnabled();
+  });
+
+  ipcMain.handle('settings:setNetworkAccessEnabled', (_event, enabled) => {
+    settingsRepo.setNetworkAccessEnabled(enabled);
+    return enabled;
+  });
 }
 
 module.exports = { registerSettingsIpc };

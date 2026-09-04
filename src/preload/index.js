@@ -23,6 +23,11 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('vault:setQuickUnlock', { enabled, currentPassphrase }),
     getIdleTimeoutSeconds: () => ipcRenderer.invoke('vault:getIdleTimeoutSeconds'),
     setIdleTimeoutSeconds: (seconds) => ipcRenderer.invoke('vault:setIdleTimeoutSeconds', seconds),
+    // Opt-in recovery phrase: 6 random words that can unlock the vault if
+    // the passphrase is forgotten -- see src/main/security/recoveryPhrase.js.
+    generateRecoveryPhrase: (currentPassphrase) => ipcRenderer.invoke('vault:generateRecoveryPhrase', currentPassphrase),
+    clearRecoveryPhrase: () => ipcRenderer.invoke('vault:clearRecoveryPhrase'),
+    recoverWithPhrase: (words) => ipcRenderer.invoke('vault:recoverWithPhrase', words),
     // Fires whenever the main process locks the vault (idle timeout or
     // manual lock), so the UI can react even if the user isn't mid-action.
     // Returns an unsubscribe function.
@@ -92,6 +97,8 @@ contextBridge.exposeInMainWorld('api', {
     exportAllIcs: () => ipcRenderer.invoke('calendarEvent:exportAllIcs'),
     exportOrderDueIcs: (orderId) => ipcRenderer.invoke('calendarEvent:exportOrderDueIcs', orderId),
     importIcs: () => ipcRenderer.invoke('calendarEvent:importIcs'),
+    getIcsQrDataUrl: (id) => ipcRenderer.invoke('calendarEvent:getIcsQrDataUrl', id),
+    getOrderDueIcsQrDataUrl: (orderId) => ipcRenderer.invoke('calendarEvent:getOrderDueIcsQrDataUrl', orderId),
   },
   search: {
     query: (queryText) => ipcRenderer.invoke('search:query', queryText),
@@ -137,6 +144,10 @@ contextBridge.exposeInMainWorld('api', {
     setDashboardNote: (note) => ipcRenderer.invoke('settings:setDashboardNote', note),
     getQuietClientThresholdDays: () => ipcRenderer.invoke('settings:getQuietClientThresholdDays'),
     setQuietClientThresholdDays: (days) => ipcRenderer.invoke('settings:setQuietClientThresholdDays', days),
+    // Master network-access lock (see src/main/security/networkGuard.js)
+    // -- off by default, gates every network-capable feature.
+    getNetworkAccessEnabled: () => ipcRenderer.invoke('settings:getNetworkAccessEnabled'),
+    setNetworkAccessEnabled: (enabled) => ipcRenderer.invoke('settings:setNetworkAccessEnabled', enabled),
   },
   update: {
     // Manual, opt-in only -- see updates/checkForUpdates.js. Nothing
@@ -144,5 +155,22 @@ contextBridge.exposeInMainWorld('api', {
     // updates" button.
     check: () => ipcRenderer.invoke('update:check'),
     openReleasePage: (url) => ipcRenderer.invoke('update:openReleasePage', url),
+  },
+  backup: {
+    // A backup file is a raw copy of the encrypted data.db, not a
+    // separate export format -- see src/main/backup/restoreBackup.js.
+    create: () => ipcRenderer.invoke('backup:create'),
+    pickFile: () => ipcRenderer.invoke('backup:pickFile'),
+    restore: (filePath, passphrase) => ipcRenderer.invoke('backup:restore', { filePath, passphrase }),
+  },
+  sync: {
+    getStatus: () => ipcRenderer.invoke('sync:getStatus'),
+    setEnabled: (enabled) => ipcRenderer.invoke('sync:setEnabled', enabled),
+    pickFolder: () => ipcRenderer.invoke('sync:pickFolder'),
+    setPassphrase: (passphrase) => ipcRenderer.invoke('sync:setPassphrase', passphrase),
+    clearPassphrase: () => ipcRenderer.invoke('sync:clearPassphrase'),
+    listPending: () => ipcRenderer.invoke('sync:listPending'),
+    applyPending: (id, resolution) => ipcRenderer.invoke('sync:applyPending', id, resolution),
+    dismissPending: (id) => ipcRenderer.invoke('sync:dismissPending', id),
   },
 });

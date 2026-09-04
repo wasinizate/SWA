@@ -2,11 +2,27 @@
 
 const fs = require('fs');
 const { ipcMain, dialog, BrowserWindow } = require('electron');
+const QRCode = require('qrcode');
 const calendarEventRepo = require('../db/repositories/calendarEvent');
 const orderRepo = require('../db/repositories/order');
 const personRepo = require('../db/repositories/person');
 const { buildIcs } = require('../calendar/icsExport');
 const { parseIcs } = require('../calendar/icsImport');
+
+// Encodes the raw .ics VEVENT text directly as the QR's payload -- a
+// known convention (event tickets/badges do this) that most QR scanner
+// apps recognize and offer "Add to Calendar" for, no server/URL needed.
+// Throws if the text won't fit in a single QR code at a scannable size;
+// callers turn that into a { tooLarge: true } result instead of letting
+// it bubble up as a hard error, since realistically the only way to hit
+// it is an event with unusually long notes.
+async function icsToQrDataUrl(icsText) {
+  try {
+    return { dataUrl: await QRCode.toDataURL(icsText, { errorCorrectionLevel: 'M' }) };
+  } catch (err) {
+    return { tooLarge: true };
+  }
+}
 
 // RFC 5545: 1 = highest ... 9 = lowest, 0/absent = undefined. 'normal'
 // deliberately omits the property rather than sending a mid-range
@@ -124,6 +140,20 @@ function registerCalendarEventIpc() {
     const icsText = buildIcs([orderDueDateToIcsItem(order)]);
     const parentWindow = BrowserWindow.fromWebContents(event.sender);
     return saveIcsFile(icsText, `order-${orderId}-due.ics`, parentWindow);
+  });
+
+  // QR counterparts to exportIcs()/exportOrderDueIcs() -- same single-item
+  // .ics text, encoded as a scannable image instead of saved to a file.
+  ipcMain.handle('calendarEvent:getIcsQrDataUrl', (_event, id) => {
+    const calendarEvent = calendarEventRepo.get(id);
+    if (!calendarEvent) throw new Error(`Calendar event ${id} not found.`);
+    return icsToQrDataUrl(buildIcs([eventToIcsItem(calendarEvent)]));
+  });
+
+  ipcMain.handle('calendarEvent:getOrderDueIcsQrDataUrl', (_event, orderId) => {
+    const order = orderRepo.listWithDeliveryDueDates().find((o) => o.id === orderId);
+    if (!order) throw new Error('This order has no delivery due date set.');
+    return icsToQrDataUrl(buildIcs([orderDueDateToIcsItem(order)]));
   });
 
   // Every VEVENT in the chosen file becomes a new calendar_events row --

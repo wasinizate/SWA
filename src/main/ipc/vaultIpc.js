@@ -34,12 +34,28 @@ function registerVaultIpc({ onUnlocked, onLocked }) {
   });
 
   ipcMain.handle('vault:changePassphrase', (_event, newPassphrase) => {
-    passphrase.changePassphrase(newPassphrase);
-    return passphrase.status();
+    const { recoveryCleared } = passphrase.changePassphrase(newPassphrase);
+    return { ...passphrase.status(), recoveryCleared };
   });
 
   ipcMain.handle('vault:setQuickUnlock', (_event, { enabled, currentPassphrase }) => {
     passphrase.setQuickUnlock(enabled, currentPassphrase);
+    return passphrase.status();
+  });
+
+  ipcMain.handle('vault:generateRecoveryPhrase', (_event, currentPassphrase) => {
+    const words = passphrase.generateRecoveryPhrase(currentPassphrase);
+    return { words, status: passphrase.status() };
+  });
+
+  ipcMain.handle('vault:clearRecoveryPhrase', () => {
+    passphrase.clearRecoveryPhrase();
+    return passphrase.status();
+  });
+
+  ipcMain.handle('vault:recoverWithPhrase', (_event, words) => {
+    passphrase.recoverWithPhrase(words);
+    onUnlocked();
     return passphrase.status();
   });
 }

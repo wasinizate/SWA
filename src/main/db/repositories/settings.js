@@ -3,6 +3,7 @@
 // Repository layer for `app_settings` (a generic key/value store -- see
 // 0001_init.sql's comment). The only place that writes raw SQL for it.
 
+const crypto = require('crypto');
 const { getDb } = require('../connection');
 
 const DEFAULT_IDLE_TIMEOUT_SECONDS = 600; // 10 minutes
@@ -95,6 +96,67 @@ function setQuietClientThresholdDays(days) {
   setSetting('quiet_client_threshold_days', days);
 }
 
+// ---- Shared-folder sync (see src/main/sync/) -------------------------
+
+// This instance's stable identity -- lets the sync scanner recognize
+// and skip files it wrote itself when scanning the shared folder for
+// *other* instances' exports. Minted once, on first use, and persisted
+// -- never regenerated after (a change here would make every remote
+// instance treat this one as brand new).
+function getSyncInstanceId() {
+  const existing = getSetting('sync_instance_id', null);
+  if (existing) return existing;
+  const generated = crypto.randomUUID();
+  setSetting('sync_instance_id', generated);
+  return generated;
+}
+
+function getSyncFolderPath() {
+  return getSetting('sync_folder_path', '');
+}
+
+function setSyncFolderPath(folderPath) {
+  setSetting('sync_folder_path', folderPath || '');
+}
+
+function getSyncEnabled() {
+  return getSetting('sync_enabled', '0') === '1';
+}
+
+function setSyncEnabled(enabled) {
+  setSetting('sync_enabled', enabled ? '1' : '0');
+}
+
+// The safeStorage-wrapped sync passphrase blob (base64) -- see
+// src/main/sync/syncPassphrase.js, the only module that ever handles
+// the raw passphrase. This is just the key/value slot it's stored in,
+// same as every other setting here.
+function getSyncPassphraseBlob() {
+  return getSetting('sync_passphrase_blob', null);
+}
+
+function setSyncPassphraseBlob(blob) {
+  setSetting('sync_passphrase_blob', blob || '');
+}
+
+// ---- Network access lock (see src/main/security/networkGuard.js) -----
+
+// Master switch for every network-capable feature in the app -- locked
+// (false) by default, so SWA makes zero network requests until this is
+// deliberately turned on in Settings -> Privacy. Every network call
+// site (today: "Check for updates"; later: any cloud sync feature)
+// checks this via networkGuard.assertNetworkAllowed() before making a
+// request, not just the UI.
+const DEFAULT_NETWORK_ACCESS_ENABLED = false;
+
+function getNetworkAccessEnabled() {
+  return getSetting('network_access_enabled', DEFAULT_NETWORK_ACCESS_ENABLED ? '1' : '0') === '1';
+}
+
+function setNetworkAccessEnabled(enabled) {
+  setSetting('network_access_enabled', enabled ? '1' : '0');
+}
+
 module.exports = {
   DEFAULT_IDLE_TIMEOUT_SECONDS,
   getIdleTimeoutSeconds,
@@ -112,4 +174,13 @@ module.exports = {
   setDashboardNote,
   getQuietClientThresholdDays,
   setQuietClientThresholdDays,
+  getSyncInstanceId,
+  getSyncFolderPath,
+  setSyncFolderPath,
+  getSyncEnabled,
+  setSyncEnabled,
+  getSyncPassphraseBlob,
+  setSyncPassphraseBlob,
+  getNetworkAccessEnabled,
+  setNetworkAccessEnabled,
 };

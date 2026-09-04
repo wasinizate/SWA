@@ -180,6 +180,34 @@ textarea:focus-visible,
   margin-bottom: 0;
 }
 
+/* Groups a run of Settings cards under a small label (e.g. "General",
+   "Security & privacy", "Data") so the page reads as sections instead of
+   one long stack of identical cards. */
+.settings-group-label {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 1.5rem 0 0.5rem;
+}
+
+.settings-group-label:first-child {
+  margin-top: 0;
+}
+
+/* Numbered word list in the "your recovery phrase" reveal modal --
+   monospace so every word is unambiguous to copy down by hand. */
+.recovery-words {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem 1.5rem;
+  font-family: monospace;
+  font-size: 1.05rem;
+  padding-left: 1.5rem;
+  margin: 0.75rem 0;
+}
+
 .centered-screen .card {
   width: 100%;
   max-width: 380px;
@@ -970,6 +998,21 @@ hr {
 
 .modal h2 {
   margin-top: 0;
+}
+
+/* Calendar event/order-due QR export (calendar.js's showQrCode()) --
+   fixed comfortable scan size, centered. White background regardless of
+   theme since a QR code's own black-on-white contrast is what a camera
+   actually needs, not something to theme. */
+.event-qr-code {
+  display: block;
+  width: 280px;
+  height: 280px;
+  margin: 0.5rem auto 0;
+  background: #fff;
+  border-radius: 4px;
+  padding: 0.5rem;
+  box-sizing: border-box;
 }
 
 /* Wider variant for content with more going on (e.g. the Import modals

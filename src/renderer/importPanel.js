@@ -11,7 +11,11 @@ import { escapeHtml, formatMoney, orderStatusLabel, previewText } from './helper
 // Formats a single diff value for display in the change list below --
 // money/status get their usual display treatment, long text fields get
 // truncated so one changed description doesn't blow out the list.
-function formatDiffValue(fieldKey, value) {
+// Exported: also used by settings.js's shared-sync "pending updates"
+// list (src/main/sync/), which shows the exact same
+// previewImport()-shaped diffs, just sourced from the sync folder
+// instead of a manually-picked file.
+export function formatDiffValue(fieldKey, value) {
   if (value === null || value === undefined || value === '') return '(empty)';
   if (fieldKey === 'amountCents') return formatMoney(value);
   if (fieldKey === 'status') return orderStatusLabel(value);
@@ -19,7 +23,7 @@ function formatDiffValue(fieldKey, value) {
   return String(value);
 }
 
-function renderChangesList(changes) {
+export function renderChangesList(changes) {
   return `<ul class="import-changes-list">${Object.entries(changes)
     .map(
       ([key, c]) =>

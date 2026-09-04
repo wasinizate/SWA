@@ -11,33 +11,6 @@ longer-term ideas.
 
 ## Later / larger
 
-- **Vault passphrase recovery via a set of random recovery phrases**
-  (BIP39-style word list, shown once at vault setup, user writes it down
-  and stores it somewhere separate from this device). Today, forgetting
-  the vault passphrase means the data is permanently unrecoverable --
-  intentional so far (`passphrase.js` is the only module that ever
-  touches a raw passphrase, and nothing is ever written to disk in
-  plaintext), but a real usability gap for a single-user local app with
-  no account-recovery-by-email fallback. Needs care, not a quick add:
-  the recovery phrase is functionally a second master key, so it has to
-  get the same never-stored-in-plaintext treatment the passphrase does
-  (derive a wrapping/encryption key from it, e.g. via PBKDF2/scrypt,
-  rather than storing the phrase or a direct hash of it) and the same
-  one-time, easy-to-misuse UX risk a written-down key always carries
-  (whoever finds the paper can unlock the vault, same trade-off already
-  called out for quick-unlock in the README's threat model). Generated
-  and shown exactly once at setup (or opt-in from Settings after the
-  fact), never regenerable/re-displayed afterward without going through
-  a full re-key.
-- **Whole-vault backup/restore.** Cross-instance export/import (Person +
-  Order handoff between two installs, e.g. two people sharing a client
-  roster) shipped -- see `src/main/dataExchange/`. Whole-vault backup/
-  restore is a natural, smaller follow-up that reuses the same bundle/
-  encrypt/decrypt plumbing (just "every table" instead of one person's
-  data), but is a different shape of operation: a destructive full-
-  replace import rather than a resolve-and-merge one, so it needs its
-  own clear, scary confirmation UI. Not built in the same round as the
-  handoff feature on purpose -- different risk profile, different UI.
 - **Budget targets** (a per-category monthly spending limit, with
   actual-vs-target shown on the Expenses tab). The expense ledger,
   slated income, and manual income-statement tracking shipped; this was

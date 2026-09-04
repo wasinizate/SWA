@@ -1,7 +1,7 @@
 {
   "name": "swa",
   "productName": "SWA",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "SWA (Sex Worker Assistant) -- a local-first, encrypted desktop CRM for independent workers managing clients across multiple online platforms.",
   "main": "src/main/index.js",
   "private": true,
@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "better-sqlite3-multiple-ciphers": "^13.0.3",
-    "fullcalendar": "^7.0.2"
+    "fullcalendar": "^7.0.2",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "electron": "^42.0.0",

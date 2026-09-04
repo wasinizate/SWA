@@ -5,6 +5,7 @@
 
 import { renderSetupView } from './views/setup.js';
 import { renderLockScreen } from './views/lockScreen.js';
+import { renderForcePassphraseResetView } from './views/forcePassphraseReset.js';
 import { renderShell } from './views/shell.js';
 
 const root = document.getElementById('app');
@@ -18,6 +19,15 @@ async function boot() {
   }
   if (!status.unlocked) {
     renderLockScreen(root, { status, onUnlocked: boot });
+    return;
+  }
+  if (status.mustResetPassphrase) {
+    // Unlocked via the recovery phrase -- see security/passphrase.js's
+    // mustResetPassphrase flag. Blocks access to the rest of the app
+    // until a new passphrase (and, separately, a new recovery phrase) is
+    // set, since the one just used no longer proves anything was
+    // memorized.
+    renderForcePassphraseResetView(root, { onComplete: boot });
     return;
   }
   renderShell(root, { onLocked: boot });

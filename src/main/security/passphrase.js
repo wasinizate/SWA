@@ -8,8 +8,17 @@ const { safeStorage } = require('electron');
 const connection = require('../db/connection');
 const { runMigrations } = require('../db/migrate');
 const vaultMeta = require('./vaultMeta');
+const recoveryPhrase = require('./recoveryPhrase');
 
 const MIN_PASSPHRASE_LENGTH = 8;
+
+// Set only by recoverWithPhrase(), cleared by changePassphrase() -- never
+// persisted to vault.json. Deliberately in-memory only: if the app is
+// closed before the forced reset completes, nothing has been invalidated
+// yet (that only happens inside changePassphrase()), so the same
+// recovery phrase still works on the next launch. No lockout risk from
+// bailing out mid-flow.
+let mustResetPassphrase = false;
 
 // Creates a brand-new encrypted database protected by `passphrase`. Only
 // valid when no vault exists yet.
@@ -54,11 +63,17 @@ function status() {
     quickUnlockEnabled: meta.quickUnlockEnabled,
     unlocked: isUnlocked(),
     quickUnlockAvailable: meta.quickUnlockEnabled && safeStorage.isEncryptionAvailable(),
+    recoveryEnabled: meta.recoveryEnabled,
+    mustResetPassphrase,
   };
 }
 
 // Re-keys the already-unlocked database to a new passphrase, then
-// re-wraps the quick-unlock blob (if enabled) so it stays in sync.
+// re-wraps the quick-unlock blob (if enabled) so it stays in sync. The
+// recovery-phrase blob can't be silently re-wrapped the same way -- doing
+// so would need the original 6 words again, which are never stored
+// anywhere -- so a recovery phrase is instead cleared here and the caller
+// is told to make a new one.
 function changePassphrase(newPassphrase) {
   if (!isUnlocked()) throw new Error('Vault must be unlocked to change its passphrase.');
   assertPassphraseStrength(newPassphrase);
@@ -70,6 +85,54 @@ function changePassphrase(newPassphrase) {
   if (meta.quickUnlockEnabled) {
     setQuickUnlock(true, newPassphrase);
   }
+
+  const recoveryCleared = meta.recoveryEnabled;
+  if (recoveryCleared) {
+    clearRecoveryPhrase();
+  }
+  mustResetPassphrase = false;
+
+  return { recoveryCleared };
+}
+
+// Generates a brand-new 6-word recovery phrase, wraps `currentPassphrase`
+// with it, and stores the wrapped blob. `currentPassphrase` is verified
+// against the live database file first (rather than trusted blindly) so
+// a stale or mistaken caller can't silently attach recovery to the wrong
+// secret. Returns the plaintext words -- the only place they're ever
+// handed out; nothing here or in vaultMeta.js ever stores them.
+function generateRecoveryPhrase(currentPassphrase) {
+  if (!isUnlocked()) throw new Error('Vault must be unlocked to set up a recovery phrase.');
+  connection.verifyPassphraseAgainstFile(connection.getDbPath(), currentPassphrase);
+
+  const words = recoveryPhrase.generatePhrase();
+  const { salt, blob } = recoveryPhrase.wrapPassphrase(words, currentPassphrase);
+
+  const meta = vaultMeta.readMeta();
+  vaultMeta.writeMeta({ ...meta, recoveryEnabled: true, recoverySalt: salt, recoveryBlob: blob });
+
+  return words;
+}
+
+function clearRecoveryPhrase() {
+  const meta = vaultMeta.readMeta();
+  vaultMeta.writeMeta({ ...meta, recoveryEnabled: false, recoverySalt: null, recoveryBlob: null });
+}
+
+// Unlocks using the 6-word recovery phrase instead of the passphrase.
+// Success sets mustResetPassphrase so the renderer forces a passphrase
+// change before letting the user into the rest of the app -- see the
+// module-level comment on that flag for why it's safe to keep in memory
+// only.
+function recoverWithPhrase(words) {
+  const meta = vaultMeta.readMeta();
+  if (!meta.recoveryEnabled) {
+    throw new Error('No recovery phrase has been set up for this vault.');
+  }
+
+  const recoveredPassphrase = recoveryPhrase.unwrapPassphrase(words, meta.recoverySalt, meta.recoveryBlob);
+  unlock(recoveredPassphrase);
+  mustResetPassphrase = true;
 }
 
 // Turns the opt-in convenience unlock on/off. When enabling, the
@@ -128,4 +191,7 @@ module.exports = {
   changePassphrase,
   setQuickUnlock,
   tryQuickUnlock,
+  generateRecoveryPhrase,
+  clearRecoveryPhrase,
+  recoverWithPhrase,
 };

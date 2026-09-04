@@ -26,6 +26,13 @@ export function renderPersonDetailView(container, { navigate, personId }) {
       <h1>${escapeHtml(person.private_label)}</h1>
 
       <section class="card">
+        <label class="checkbox-label">
+          <input type="checkbox" id="person-shared" ${person.is_shared ? 'checked' : ''} />
+          Shared with collaborators -- syncs (all of their orders) via the shared folder configured in Settings
+        </label>
+      </section>
+
+      <section class="card">
         <h2>Notes</h2>
         <form id="notes-form">
           <label>General notes<textarea id="general-notes" rows="3">${escapeHtml(person.general_notes)}</textarea></label>
@@ -88,6 +95,11 @@ export function renderPersonDetailView(container, { navigate, personId }) {
     `;
 
     container.querySelector('#back').addEventListener('click', () => navigate('people'));
+
+    container.querySelector('#person-shared').addEventListener('change', async (event) => {
+      await window.api.person.update(personId, { isShared: event.target.checked });
+      showToast(event.target.checked ? 'Now syncing with collaborators.' : 'No longer shared.');
+    });
 
     container.querySelector('#notes-form').addEventListener('submit', async (event) => {
       event.preventDefault();

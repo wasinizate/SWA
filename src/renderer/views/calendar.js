@@ -219,6 +219,35 @@ export function renderCalendarView(container, { navigate, focusOrderId }) {
 
   container.querySelector('#new-event').addEventListener('click', () => openEventModal(null));
 
+  // Shared by both the "Edit event" modal and the order-due modal below
+  // -- fetches a QR-code data URL (main process encodes the same .ics
+  // text the file-export buttons produce, see calendarEventIpc.js) and
+  // shows it large enough to scan comfortably.
+  async function showQrCode(title, fetchDataUrl) {
+    let result;
+    try {
+      result = await fetchDataUrl();
+    } catch (err) {
+      alert(`Failed to generate QR code: ${err.message}`);
+      return;
+    }
+
+    if (result.tooLarge) {
+      alert("This event's details are too long to fit in a single QR code -- try shortening the notes, or use Export .ics instead.");
+      return;
+    }
+
+    openModal({
+      title,
+      render: (body) => {
+        body.innerHTML = `
+          <p class="hint">Scan with your phone's camera or a QR reader app -- most recognize this as a calendar invite and offer to add it.</p>
+          <img src="${result.dataUrl}" alt="QR code" class="event-qr-code" />
+        `;
+      },
+    });
+  }
+
   // Order-due entries (the amber 📦 ones) aren't real calendar_events
   // rows -- they're synthesized live from the order's own due date (see
   // loadEvents() above) -- so there's no "Edit event" modal for them.
@@ -233,6 +262,7 @@ export function renderCalendarView(container, { navigate, focusOrderId }) {
           <div class="form-actions">
             <button type="button" id="order-due-view">View order</button>
             <button type="button" class="btn-secondary" id="order-due-export">Export .ics</button>
+            <button type="button" class="btn-secondary" id="order-due-qr">Show QR code</button>
           </div>
         `;
 
@@ -248,6 +278,10 @@ export function renderCalendarView(container, { navigate, focusOrderId }) {
           } catch (err) {
             alert(`Failed to export: ${err.message}`);
           }
+        });
+
+        body.querySelector('#order-due-qr').addEventListener('click', () => {
+          showQrCode(`Order #${orderId} due date`, () => window.api.calendarEvent.getOrderDueIcsQrDataUrl(orderId));
         });
       },
     });
@@ -363,6 +397,7 @@ export function renderCalendarView(container, { navigate, focusOrderId }) {
             <button type="submit">Save</button>
             <button type="button" class="btn-secondary" id="event-cancel">Cancel</button>
             ${isEditing ? '<button type="button" class="btn-secondary" id="event-export-ics">Export .ics</button>' : ''}
+            ${isEditing ? '<button type="button" class="btn-secondary" id="event-show-qr">Show QR code</button>' : ''}
             ${isEditing ? '<button type="button" class="danger" id="event-delete">Delete</button>' : ''}
           </div>
         </form>
@@ -517,6 +552,10 @@ export function renderCalendarView(container, { navigate, focusOrderId }) {
         } catch (err) {
           alert(`Failed to export: ${err.message}`);
         }
+      });
+
+      overlay.querySelector('#event-show-qr').addEventListener('click', () => {
+        showQrCode(data.title, () => window.api.calendarEvent.getIcsQrDataUrl(data.id));
       });
 
       overlay.querySelector('#event-delete').addEventListener('click', async () => {

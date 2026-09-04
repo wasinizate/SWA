@@ -28,8 +28,11 @@ const { registerIncomeStatementAttachmentIpc } = require('./ipc/incomeStatementA
 const { registerDataExchangeIpc } = require('./ipc/dataExchangeIpc');
 const { registerSettingsIpc } = require('./ipc/settingsIpc');
 const { registerUpdateIpc } = require('./ipc/updateIpc');
+const { registerSyncIpc } = require('./ipc/syncIpc');
+const { registerBackupIpc } = require('./ipc/backupIpc');
 const idleLock = require('./security/idleLock');
 const reminderScheduler = require('./reminders/reminderScheduler');
+const syncScheduler = require('./sync/syncScheduler');
 const connection = require('./db/connection');
 const settingsRepo = require('./db/repositories/settings');
 
@@ -52,6 +55,7 @@ function getIdleTimeoutSeconds() {
 function notifyLocked(reason) {
   idleLock.stop();
   reminderScheduler.stop();
+  syncScheduler.stop();
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('vault:locked', { reason });
   }
@@ -62,6 +66,7 @@ function notifyLocked(reason) {
 function notifyUnlocked() {
   idleLock.start(getIdleTimeoutSeconds, notifyLocked);
   reminderScheduler.start(() => mainWindow);
+  syncScheduler.start(() => mainWindow);
 }
 
 app.whenReady().then(() => {
@@ -82,6 +87,8 @@ app.whenReady().then(() => {
   registerDataExchangeIpc();
   registerSettingsIpc();
   registerUpdateIpc();
+  registerSyncIpc();
+  registerBackupIpc();
 
   mainWindow = createMainWindow();
 
@@ -97,6 +104,7 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   idleLock.stop();
   reminderScheduler.stop();
+  syncScheduler.stop();
   connection.close();
   if (process.platform !== 'darwin') app.quit();
 });

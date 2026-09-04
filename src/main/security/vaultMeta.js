@@ -6,10 +6,14 @@ const { app } = require('electron');
 
 // vault.json lives next to the encrypted database in the OS app-data
 // folder. It ONLY ever holds non-secret bookkeeping: whether a vault has
-// been set up yet, and (optionally) an OS-keychain-wrapped passphrase blob
-// for the opt-in "quick unlock" feature. The passphrase itself is NEVER
-// written here in plaintext -- see passphrase.js for how the blob is
-// produced (Electron's safeStorage, tied to the OS user account).
+// been set up yet, an (optional) OS-keychain-wrapped passphrase blob for
+// the opt-in "quick unlock" feature, and an (optional) recovery-phrase-
+// wrapped passphrase blob for the opt-in "recovery phrase" feature. The
+// passphrase itself is NEVER written here in plaintext -- see
+// passphrase.js for how each blob is produced (Electron's safeStorage
+// for quick unlock; recoveryPhrase.js's scrypt+AES-GCM for the recovery
+// phrase). recoverySalt is not secret (it's needed to re-derive the same
+// key from the phrase later, same as any password-hashing salt).
 
 function getMetaPath() {
   return path.join(app.getPath('userData'), 'vault.json');
@@ -19,6 +23,9 @@ const DEFAULT_META = {
   initialized: false,
   quickUnlockEnabled: false,
   quickUnlockBlob: null, // base64 string from Electron's safeStorage, or null
+  recoveryEnabled: false,
+  recoverySalt: null, // base64 scrypt salt, or null
+  recoveryBlob: null, // base64 iv+authTag+ciphertext from recoveryPhrase.js, or null
 };
 
 function readMeta() {

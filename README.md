@@ -135,6 +135,25 @@ stored as integer cents to avoid floating-point rounding errors).
 - The database file is encrypted at rest using
   [`better-sqlite3-multiple-ciphers`](https://github.com/m4heshd/better-sqlite3-multiple-ciphers),
   a SQLCipher-compatible (AES-256) fork of `better-sqlite3`.
+- Settings → "Backup & restore" saves a byte-for-byte copy of that same
+  encrypted database file — a backup carries the exact same encryption
+  and passphrase as the live vault, so a backup file is exactly as
+  sensitive as `data.db` itself and should be stored/protected the same
+  way. Restoring one is a full, destructive replace of everything
+  currently in the vault (not a merge), so it requires re-entering your
+  passphrase to confirm and always keeps an untouched, never-auto-deleted
+  copy of the pre-restore data alongside `data.db` first, in case the
+  restore itself was a mistake.
+- Settings → "Recovery phrase" can generate 6 random words (from the
+  standard BIP-39 word list) that let you back into the vault if you
+  forget your passphrase — shown once, never stored anywhere in
+  plaintext. It's opt-in and off by default, and it's functionally a
+  second master key: anyone with the words and no passphrase at all can
+  still unlock the vault, so treat them with the same care as the
+  passphrase itself (not taped to the laptop). Changing your passphrase
+  invalidates any existing recovery phrase, since it only unlocks back
+  to the passphrase it was created against — the app tells you when
+  this happens so you can generate a new one.
 - Your passphrase is **never stored in plaintext**. By default it isn't
   stored anywhere at all — you re-enter it every time you unlock,
   including after auto-lock. There's an *opt-in* "quick unlock" setting
@@ -147,7 +166,12 @@ stored as integer cents to avoid floating-point rounding errors).
   passphrase again.
 - No automatic or background network requests are made by this app's own
   code: no account creation, no sync, no analytics, no crash reporting.
-  The **one exception** is a manual "Check for updates" button in
+  Network access itself is a locked-by-default toggle in Settings →
+  Privacy (see
+  [`src/main/security/networkGuard.js`](src/main/security/networkGuard.js))
+  — every network-capable feature checks it first, so the app is
+  provably offline until you deliberately turn it on. Today the only
+  feature that toggle unlocks is a manual "Check for updates" button in
   Settings — nothing happens unless you click it, and all it does is ask
   GitHub's public API for this project's latest release tag to compare
   against your current version (see
@@ -173,6 +197,10 @@ stored as integer cents to avoid floating-point rounding errors).
 - Data being exposed via clipboard/cloud-sync tools you might have
   running, since nothing is written outside the app's own local data
   folder.
+- The app ever making a network request you didn't explicitly opt into
+  — "Network access" (Settings → Privacy) is locked by default, and
+  every network-capable feature is required to check it before making a
+  request, not just hide its button in the UI.
 
 **This does NOT protect against:**
 - Malware, a keylogger, or another user process running on your machine
@@ -186,6 +214,11 @@ stored as integer cents to avoid floating-point rounding errors).
   just someone who knows your app passphrase) could have the app decrypt
   the vault, bypassing the "you must retype your passphrase" guarantee.
   Leave this off if that's not an acceptable trade-off for your setup.
+- Setting up a **recovery phrase**: whoever finds the 6 written-down
+  words can unlock the vault with no passphrase at all — the same
+  trade-off as quick-unlock, except the secret lives on paper instead of
+  your OS keychain, so it's on you to store it somewhere as secure as
+  the passphrase itself.
 - Forensic recovery of data from RAM, swap/pagefile, or a "cold boot"
   style attack — the decrypted database and cached in-memory query
   results are ordinary process memory, not specially hardened.
