@@ -74,6 +74,11 @@ export const PAYMENT_METHOD_PRESETS = [
 // from person to person.
 export const EXPENSE_CATEGORY_PRESETS = ['Supplies', 'Software/Subscriptions', 'Marketing', 'Travel', 'Fees', 'Other'];
 
+// Suggested values for a content item's type field (see
+// views/contentLibrary.js), same "free text, not an enum" approach as
+// PAYMENT_METHOD_PRESETS/EXPENSE_CATEGORY_PRESETS above.
+export const CONTENT_TYPE_PRESETS = ['Video', 'Picture set', 'Custom request', 'Other'];
+
 // The fixed set of order statuses. Stored as free TEXT in the database
 // (see 0001_init.sql's comments), but the renderer only ever writes one
 // of these five values via <select> elements built from this list.
@@ -84,6 +89,27 @@ export const ORDER_STATUSES = [
   { value: 'completed', label: 'Completed' },
   { value: 'cancelled', label: 'Cancelled' },
 ];
+
+// The fixed set of client priority levels (see 0013_person_priority.sql)
+// -- same "free text with a small fixed set" convention as
+// ORDER_STATUSES above, and as calendar.js's own PRIORITY_OPTIONS for
+// calendar events (a separate, unrelated field).
+export const PRIORITY_OPTIONS = [
+  { value: 'low', label: 'Low priority' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'vip', label: 'VIP' },
+];
+
+// '' for 'normal' -- the common case shouldn't add visual noise to every
+// row of the Clients list -- else a small colored badge. Shared between
+// people.js (list) and personDetail.js (the client's own page) so both
+// render the same badge the same way.
+export function priorityBadgeHtml(priority) {
+  if (!priority || priority === 'normal') return '';
+  const match = PRIORITY_OPTIONS.find((p) => p.value === priority);
+  const label = match ? match.label : priority;
+  return `<span class="priority-badge priority-${escapeHtml(priority)}">${escapeHtml(label)}</span>`;
+}
 
 export function orderStatusLabel(value) {
   const match = ORDER_STATUSES.find((s) => s.value === value);

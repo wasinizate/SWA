@@ -28,6 +28,8 @@ const orderRepo = require('../db/repositories/order');
 const platformAccountRepo = require('../db/repositories/platformAccount');
 const orderAttachmentRepo = require('../db/repositories/orderAttachment');
 const personExternalLinkRepo = require('../db/repositories/personExternalLink');
+const contentItemRepo = require('../db/repositories/contentItem');
+const contentItemExternalLinkRepo = require('../db/repositories/contentItemExternalLink');
 
 // local: the DB column name (snake_case). incoming: the bundle's key
 // for the same field (camelCase, matches what buildExportBundle.js
@@ -74,6 +76,100 @@ function resolvePersonId(personExternalId) {
   return personExternalLinkRepo.getPersonIdForExternalId(personExternalId);
 }
 
+// Read-only lookup for an incoming content-item reference ({ externalId,
+// title }) -- three checks, same escalating order as resolvePersonId()
+// plus one extra step content items get that persons don't:
+//   1. A direct match: some local content item's own external_id is
+//      exactly this one.
+//   2. A remembered alias in content_item_external_links (see #3 below
+//      for how one gets created).
+//   3. An exact, case-insensitive title match against the local content
+//      library (contentItem.js's findByTitle() -- same trust level
+//      orderDetail.js's own "attach by title" picker already uses for a
+//      human typing a title in by hand, just applied automatically
+//      here). This step exists because, unlike a client, a content item
+//      is very plausibly already cataloged independently on both sides
+//      (both people describe the same title the same way), and reusing
+//      that match beats creating a duplicate catalog entry.
+// No match at all -- resolved by resolveOrCreateContentItemId() below,
+// never here (this function never writes).
+function peekContentItemId(externalId, title) {
+  const direct = contentItemRepo.getByExternalId(externalId);
+  if (direct) return direct.id;
+
+  const linked = contentItemExternalLinkRepo.getContentItemIdForExternalId(externalId);
+  if (linked) return linked;
+
+  const byTitle = contentItemRepo.findByTitle(title);
+  return byTitle ? byTitle.id : null;
+}
+
+// Write path: resolves via peekContentItemId() first, and only creates a
+// new placeholder content item (title only -- no location/price/type,
+// since none of that travels in the export and guessing wrong is worse
+// than leaving it blank) when nothing local matches at all. This is what
+// keeps "Client A bought content item B" from silently disappearing just
+// because B was never cataloged on the receiving install. Returns
+// { id, created } -- `created` lets the caller tally how many new
+// placeholder catalog entries this import actually produced.
+function resolveOrCreateContentItemId(externalId, title) {
+  const direct = contentItemRepo.getByExternalId(externalId);
+  if (direct) return { id: direct.id, created: false };
+
+  const linked = contentItemExternalLinkRepo.getContentItemIdForExternalId(externalId);
+  if (linked) return { id: linked, created: false };
+
+  const byTitle = contentItemRepo.findByTitle(title);
+  if (byTitle) {
+    // Two-way link so a repeat import of the same source item resolves
+    // directly next time (step 1 above), same reasoning as
+    // applyImport()'s own person-linking step below. If this local item
+    // already carries a *different* external_id (it has its own
+    // separate export identity already), that identity is never
+    // overwritten -- this external_id is remembered as an alias instead.
+    if (!byTitle.external_id) contentItemRepo.setExternalId(byTitle.id, externalId);
+    else contentItemExternalLinkRepo.create(externalId, byTitle.id);
+    return { id: byTitle.id, created: false };
+  }
+
+  const created = contentItemRepo.create({ title });
+  contentItemRepo.setExternalId(created.id, externalId);
+  return { id: created.id, created: true };
+}
+
+// How many of this order's incoming content items aren't attached
+// locally yet -- used by both the preview (read-only, via
+// peekContentItemId) and, indirectly, the apply path's own per-item
+// check.
+function countNewContentItemAttachments(localOrderId, incomingContentItems) {
+  const existing = contentItemRepo.listForOrder(localOrderId);
+  return (incomingContentItems || []).filter((ci) => {
+    const localId = peekContentItemId(ci.externalId, ci.title);
+    return localId === null || !existing.some((c) => c.id === localId);
+  }).length;
+}
+
+// Across the *whole* bundle, how many distinct content items don't
+// resolve to anything local at all -- these are the ones that will
+// become brand-new placeholder catalog entries if this bundle is
+// applied. Surfaced in the preview so that isn't invisible, even though
+// (unlike a person) it never blocks on a human decision -- a title-only
+// catalog stub is low-stakes enough to just create, matching how a new
+// platform account or order attachment is always additive without a
+// prompt.
+function countNewPlaceholderContentItems(bundle) {
+  const seen = new Set();
+  let count = 0;
+  for (const order of bundle.orders) {
+    for (const ci of order.contentItems || []) {
+      if (seen.has(ci.externalId)) continue;
+      seen.add(ci.externalId);
+      if (peekContentItemId(ci.externalId, ci.title) === null) count += 1;
+    }
+  }
+  return count;
+}
+
 // Given an already-fetched list of existing attachments (so callers that
 // need to add them too only fetch once, not once per attachment) and a
 // bundle's incoming attachment list, returns the incoming ones not
@@ -110,9 +206,10 @@ function previewImport(bundle) {
 
           const changes = diffFields(local, orderData, ORDER_UPDATE_FIELDS);
           const newAttachmentCount = countNewAttachments(local.id, orderData.attachments);
-          if (Object.keys(changes).length === 0 && newAttachmentCount === 0) return null; // nothing to show
+          const newContentItemCount = countNewContentItemAttachments(local.id, orderData.contentItems);
+          if (Object.keys(changes).length === 0 && newAttachmentCount === 0 && newContentItemCount === 0) return null; // nothing to show
 
-          return { externalId: orderData.externalId, localOrderId: local.id, changes, newAttachmentCount };
+          return { externalId: orderData.externalId, localOrderId: local.id, changes, newAttachmentCount, newContentItemCount };
         })
         .filter(Boolean)
     : [];
@@ -126,6 +223,13 @@ function previewImport(bundle) {
     orderCount: bundle.orders.length,
     newOrderCount,
     updates,
+    // Distinct content items across the whole bundle that don't match
+    // anything local (by id, remembered alias, or title) -- these become
+    // new title-only placeholder catalog entries if applied. See
+    // countNewPlaceholderContentItems()'s comment for why this is
+    // surfaced rather than silent, despite never blocking on a decision
+    // the way an unresolved person does.
+    newPlaceholderContentItemCount: countNewPlaceholderContentItems(bundle),
     // Only actually needed by the renderer when unresolved (to populate
     // the "attach to an existing client" picker) -- omitted otherwise so
     // an already-linked import's preview doesn't carry the whole client
@@ -222,6 +326,8 @@ function applyImport(bundle, resolution = {}) {
   let ordersUpdated = 0;
   let ordersSkipped = 0;
   let attachmentsAdded = 0;
+  let contentItemsAttached = 0;
+  let contentItemsCreated = 0;
 
   for (const orderData of bundle.orders) {
     const localOrder = orderRepo.getByExternalId(orderData.externalId);
@@ -253,6 +359,16 @@ function applyImport(bundle, resolution = {}) {
           mimeType: attachment.mimeType,
           data: Buffer.from(attachment.dataBase64, 'base64'),
         });
+      }
+
+      for (const ci of orderData.contentItems || []) {
+        const { id: localContentItemId, created } = resolveOrCreateContentItemId(ci.externalId, ci.title);
+        if (created) contentItemsCreated += 1;
+        contentItemRepo.addToOrder(createdOrder.id, localContentItemId);
+        if (ci.pricePaidCents !== null && ci.pricePaidCents !== undefined) {
+          contentItemRepo.setPricePaid(createdOrder.id, localContentItemId, ci.pricePaidCents);
+        }
+        contentItemsAttached += 1;
       }
 
       ordersImported += 1;
@@ -291,6 +407,28 @@ function applyImport(bundle, resolution = {}) {
         });
         attachmentsAdded += 1;
       }
+
+      // Content items: newly-referenced ones get attached (creating a
+      // placeholder catalog entry first if nothing local matches); an
+      // already-attached one only has its price-paid override synced,
+      // and only when it actually differs, mirroring how every other
+      // order field above only writes on a real change.
+      const existingContentItems = contentItemRepo.listForOrder(localOrder.id); // fetched once, not once per item
+      for (const ci of orderData.contentItems || []) {
+        const { id: localContentItemId, created } = resolveOrCreateContentItemId(ci.externalId, ci.title);
+        if (created) contentItemsCreated += 1;
+
+        const alreadyAttached = existingContentItems.find((c) => c.id === localContentItemId);
+        if (!alreadyAttached) {
+          contentItemRepo.addToOrder(localOrder.id, localContentItemId);
+          if (ci.pricePaidCents !== null && ci.pricePaidCents !== undefined) {
+            contentItemRepo.setPricePaid(localOrder.id, localContentItemId, ci.pricePaidCents);
+          }
+          contentItemsAttached += 1;
+        } else if ((alreadyAttached.price_paid_cents ?? null) !== (ci.pricePaidCents ?? null)) {
+          contentItemRepo.setPricePaid(localOrder.id, localContentItemId, ci.pricePaidCents ?? null);
+        }
+      }
     } else {
       ordersSkipped += 1;
     }
@@ -303,6 +441,8 @@ function applyImport(bundle, resolution = {}) {
     ordersUpdated,
     ordersSkipped,
     attachmentsAdded,
+    contentItemsAttached,
+    contentItemsCreated,
   };
 }
 

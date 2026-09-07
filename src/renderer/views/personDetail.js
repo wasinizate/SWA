@@ -5,9 +5,10 @@
 // creating a new order, which drops you straight onto its page (the same
 // "click New Ticket, land on the ticket" flow as a ticketing system).
 
-import { escapeHtml, formatMoney, buildStatusOptions, loadingHtml } from '../helpers.js';
+import { escapeHtml, formatMoney, buildStatusOptions, loadingHtml, PRIORITY_OPTIONS, priorityBadgeHtml } from '../helpers.js';
 import { promptForPassphrase } from '../exportPassphrasePrompt.js';
 import { showToast } from '../toast.js';
+import { attachTagAutocomplete } from '../tagAutocomplete.js';
 
 export function renderPersonDetailView(container, { navigate, personId }) {
   container.innerHTML = loadingHtml();
@@ -23,9 +24,15 @@ export function renderPersonDetailView(container, { navigate, personId }) {
 
     container.innerHTML = `
       <button class="link-button" id="back" type="button">&larr; Back to Clients</button>
-      <h1>${escapeHtml(person.private_label)}</h1>
+      <h1>${escapeHtml(person.private_label)} ${priorityBadgeHtml(person.priority)}</h1>
 
       <section class="card">
+        <label>
+          Priority
+          <select id="person-priority">
+            ${PRIORITY_OPTIONS.map((o) => `<option value="${o.value}">${o.label}</option>`).join('')}
+          </select>
+        </label>
         <label class="checkbox-label">
           <input type="checkbox" id="person-shared" ${person.is_shared ? 'checked' : ''} />
           Shared with collaborators -- syncs (all of their orders) via the shared folder configured in Settings
@@ -45,8 +52,7 @@ export function renderPersonDetailView(container, { navigate, personId }) {
         <h2>Tags</h2>
         <div id="tag-list" class="tag-list"></div>
         <form id="tag-form" class="inline-form">
-          <input type="text" id="tag-input" placeholder="Add a tag (e.g. regular, verified)" list="tag-options" />
-          <datalist id="tag-options"></datalist>
+          <input type="text" id="tag-input" placeholder="Add a tag (e.g. regular, verified)" autocomplete="off" />
           <button type="submit" class="btn-secondary">Add</button>
         </form>
       </section>
@@ -96,6 +102,13 @@ export function renderPersonDetailView(container, { navigate, personId }) {
 
     container.querySelector('#back').addEventListener('click', () => navigate('people'));
 
+    container.querySelector('#person-priority').value = person.priority || 'normal';
+    container.querySelector('#person-priority').addEventListener('change', async (event) => {
+      const updated = await window.api.person.update(personId, { priority: event.target.value });
+      container.querySelector('h1').innerHTML = `${escapeHtml(updated.private_label)} ${priorityBadgeHtml(updated.priority)}`;
+      showToast('Priority updated.');
+    });
+
     container.querySelector('#person-shared').addEventListener('change', async (event) => {
       await window.api.person.update(personId, { isShared: event.target.checked });
       showToast(event.target.checked ? 'Now syncing with collaborators.' : 'No longer shared.');
@@ -110,14 +123,31 @@ export function renderPersonDetailView(container, { navigate, personId }) {
       showToast('Notes saved.');
     });
 
+    const tagInput = container.querySelector('#tag-input');
+    let allTagLabels = [];
+
+    async function addTag(label) {
+      const trimmed = label.trim();
+      if (!trimmed) return;
+      await window.api.tag.addToPerson(personId, trimmed);
+      tagInput.value = '';
+      await refreshTags();
+    }
+
     container.querySelector('#tag-form').addEventListener('submit', async (event) => {
       event.preventDefault();
-      const input = container.querySelector('#tag-input');
-      const label = input.value.trim();
-      if (!label) return;
-      await window.api.tag.addToPerson(personId, label);
-      input.value = '';
-      await refreshTags();
+      await addTag(tagInput.value);
+    });
+
+    // Real-time, keyboard-navigable suggestions from every tag that
+    // exists anywhere (not just this person's) -- reuses existing
+    // spelling instead of accidentally creating "Regular" and "regular"
+    // as two tags. Enter with nothing highlighted falls through to the
+    // form's own submit above, so a brand-new label still works.
+    attachTagAutocomplete({
+      input: tagInput,
+      getOptions: () => allTagLabels,
+      onSelect: addTag,
     });
 
     container.querySelector('#account-form').addEventListener('submit', async (event) => {
@@ -201,6 +231,7 @@ export function renderPersonDetailView(container, { navigate, personId }) {
 
     async function refreshTags() {
       const [tags, allTags] = await Promise.all([window.api.tag.listForPerson(personId), window.api.tag.listAll()]);
+      allTagLabels = allTags.map((t) => t.label);
 
       const listEl = container.querySelector('#tag-list');
       listEl.innerHTML = tags.length
@@ -221,14 +252,6 @@ export function renderPersonDetailView(container, { navigate, personId }) {
           await refreshTags();
         });
       });
-
-      // Every tag that exists anywhere, not just this person's -- that's
-      // the point of autocomplete: reuse existing spelling instead of
-      // accidentally creating "Regular" and "regular" as two tags (the
-      // UNIQUE COLLATE NOCASE column would actually prevent that exact
-      // case, but matching case-insensitively up front avoids relying on
-      // the constraint to paper over a near-miss).
-      container.querySelector('#tag-options').innerHTML = allTags.map((t) => `<option value="${escapeHtml(t.label)}"></option>`).join('');
     }
 
     async function refreshAccounts() {

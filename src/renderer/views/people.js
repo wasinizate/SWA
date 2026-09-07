@@ -3,7 +3,7 @@
 // deliberately differ), with inline "add" and a link into the detail
 // view (which handles their notes, platform accounts, and orders).
 
-import { escapeHtml, formatDateTime, daysSince, formatDaysSince } from '../helpers.js';
+import { escapeHtml, formatDateTime, daysSince, formatDaysSince, PRIORITY_OPTIONS, priorityBadgeHtml } from '../helpers.js';
 import { openModal } from '../modal.js';
 import { renderImportPanel } from '../importPanel.js';
 
@@ -27,6 +27,13 @@ export function renderPeopleView(container, { navigate, quietOnly }) {
         </select>
       </label>
       <label>
+        Filter by priority
+        <select id="filter-priority">
+          <option value="">All</option>
+          ${PRIORITY_OPTIONS.map((o) => `<option value="${o.value}">${o.label}</option>`).join('')}
+        </select>
+      </label>
+      <label>
         Flag quiet after (days)
         <input type="number" id="quiet-threshold-input" min="1" max="365" />
       </label>
@@ -36,14 +43,15 @@ export function renderPeopleView(container, { navigate, quietOnly }) {
     </div>
 
     <table class="data-table">
-      <thead><tr><th>Label</th><th>Tags</th><th>Last order</th><th>Added</th><th></th></tr></thead>
-      <tbody id="rows"><tr><td colspan="5" class="loading-state">Loading…</td></tr></tbody>
+      <thead><tr><th>Label</th><th>Priority</th><th>Tags</th><th>Last order</th><th>Added</th><th></th></tr></thead>
+      <tbody id="rows"><tr><td colspan="6" class="loading-state">Loading…</td></tr></tbody>
     </table>
   `;
 
   const errorEl = container.querySelector('#error');
   const rowsEl = container.querySelector('#rows');
   const filterSelect = container.querySelector('#filter-tag');
+  const priorityFilterSelect = container.querySelector('#filter-priority');
   const quietOnlyCheckbox = container.querySelector('#quiet-only-filter');
   const thresholdInput = container.querySelector('#quiet-threshold-input');
 
@@ -70,15 +78,23 @@ export function renderPeopleView(container, { navigate, quietOnly }) {
   }
 
   function renderTagFilterOptions(allTags) {
+    // tag.listAll() returns every tag in the shared vocabulary,
+    // including ones only ever used on a content item (see
+    // tag.js/contentItem.js) -- filtered down to tags with at least one
+    // client here so this dropdown can't offer an option that would
+    // always show "no clients match", same reasoning contentLibrary.js's
+    // own tag filter uses (built only from tags its items actually have).
+    const clientTags = allTags.filter((t) => t.usage_count > 0);
+
     const previousValue = filterSelect.value;
     filterSelect.innerHTML = `
       <option value="">All</option>
-      ${allTags.map((t) => `<option value="${t.id}">${escapeHtml(t.label)}</option>`).join('')}
+      ${clientTags.map((t) => `<option value="${t.id}">${escapeHtml(t.label)}</option>`).join('')}
     `;
     // Keep the current selection if that tag still exists, otherwise
     // falls back to "All" -- e.g. after removing the last client tagged
     // with whatever's currently filtered on.
-    if (allTags.some((t) => String(t.id) === previousValue)) filterSelect.value = previousValue;
+    if (clientTags.some((t) => String(t.id) === previousValue)) filterSelect.value = previousValue;
   }
 
   // A client with no orders at all was never really "heard from" to
@@ -97,12 +113,15 @@ export function renderPeopleView(container, { navigate, quietOnly }) {
       const tagId = Number(filterSelect.value);
       people = people.filter((p) => (tagsByPerson[p.id] || []).some((t) => t.id === tagId));
     }
+    if (priorityFilterSelect.value) {
+      people = people.filter((p) => (p.priority || 'normal') === priorityFilterSelect.value);
+    }
     if (quietOnlyCheckbox.checked) {
       people = people.filter((p) => isQuiet(p.id));
     }
 
     if (people.length === 0) {
-      rowsEl.innerHTML = `<tr><td colspan="5" class="muted">${
+      rowsEl.innerHTML = `<tr><td colspan="6" class="muted">${
         allPeople.length === 0 ? 'No clients yet.' : 'No clients match this filter.'
       }</td></tr>`;
       return;
@@ -116,6 +135,7 @@ export function renderPeopleView(container, { navigate, quietOnly }) {
         return `
         <tr>
           <td><button class="link-button" data-open="${p.id}">${escapeHtml(p.private_label)}</button></td>
+          <td>${priorityBadgeHtml(p.priority)}</td>
           <td>${
             tags.length
               ? `<div class="tag-list">${tags.map((t) => `<span class="tag-chip">${escapeHtml(t.label)}</span>`).join('')}</div>`
@@ -141,6 +161,7 @@ export function renderPeopleView(container, { navigate, quietOnly }) {
   }
 
   filterSelect.addEventListener('change', render);
+  priorityFilterSelect.addEventListener('change', render);
   quietOnlyCheckbox.addEventListener('change', render);
 
   thresholdInput.addEventListener('change', async () => {

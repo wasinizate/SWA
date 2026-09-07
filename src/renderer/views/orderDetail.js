@@ -10,6 +10,8 @@ import { createAttachmentGrid } from '../attachmentGrid.js';
 import { createLineItemRows } from '../lineItemRows.js';
 import { openModal } from '../modal.js';
 import { showToast } from '../toast.js';
+import { attachTagAutocomplete } from '../tagAutocomplete.js';
+import { priceSliderHtml, wirePriceSlider } from '../priceSlider.js';
 
 export function renderOrderDetailView(container, { navigate, orderId }) {
   container.innerHTML = loadingHtml();
@@ -127,6 +129,21 @@ export function renderOrderDetailView(container, { navigate, orderId }) {
             <option value="maybe" ${order.would_repeat === 'maybe' ? 'selected' : ''}>Maybe</option>
           </select>
         </label>
+      </section>
+
+      <section class="card">
+        <h2>Content sold</h2>
+        <p class="hint">
+          Attach one or more items from the <a href="#" id="content-library-link">Content library</a> that were part
+          of this order -- feeds that item's own sales stats. "Price paid" is optional and only matters when you're
+          bundling items or selling at a discount off the usual price -- leave it blank to just count this item as
+          part of the order's full amount.
+        </p>
+        <div id="content-item-list"></div>
+        <form id="content-item-form" class="inline-form">
+          <input type="text" id="content-item-input" placeholder="Attach a content item by title" autocomplete="off" />
+          <button type="submit" class="btn-secondary">Attach</button>
+        </form>
       </section>
 
       <section class="card">
@@ -359,6 +376,92 @@ export function renderOrderDetailView(container, { navigate, orderId }) {
     container.querySelector('#payment-method-options').innerHTML = allPaymentOptions
       .map((value) => `<option value="${escapeHtml(value)}"></option>`)
       .join('');
+
+    // ---- Content sold -----------------------------------------------------
+    // Picks from *existing* content library items only (unlike the Tags
+    // picker elsewhere, which creates a new tag on the fly for any typed
+    // label) -- a content item needs more fields than a single title, so
+    // creating one belongs on its own page (contentDetail.js), not a
+    // quick free-type here.
+
+    container.querySelector('#content-library-link').addEventListener('click', (event) => {
+      event.preventDefault();
+      navigate('contentLibrary');
+    });
+
+    const contentItemInput = container.querySelector('#content-item-input');
+    let allContentItemTitles = [];
+
+    async function attachContentItem(title) {
+      const trimmed = title.trim();
+      if (!trimmed) return;
+      const match = await window.api.contentItem.findByTitle(trimmed);
+      if (!match) {
+        alert(`No content item titled "${trimmed}" -- create it first in the Content library.`);
+        return;
+      }
+      await window.api.contentItem.addToOrder(orderId, match.id);
+      contentItemInput.value = '';
+      await refreshContentItems();
+    }
+
+    container.querySelector('#content-item-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      await attachContentItem(contentItemInput.value);
+    });
+
+    attachTagAutocomplete({
+      input: contentItemInput,
+      getOptions: () => allContentItemTitles,
+      onSelect: attachContentItem,
+    });
+
+    async function refreshContentItems() {
+      const [attached, allItems] = await Promise.all([window.api.contentItem.listForOrder(orderId), window.api.contentItem.listAll()]);
+      allContentItemTitles = allItems.map((i) => i.title);
+
+      const listEl = container.querySelector('#content-item-list');
+      listEl.innerHTML = attached.length
+        ? `
+          <table class="data-table">
+            <thead><tr><th>Item</th><th>Suggested price</th><th>Price paid (this sale)</th><th></th></tr></thead>
+            <tbody>
+              ${attached
+                .map(
+                  (i) => `
+                <tr>
+                  <td>${escapeHtml(i.title)}</td>
+                  <td>${formatMoney(i.price_cents)}</td>
+                  <td>${priceSliderHtml({
+                    idPrefix: `content-item-price-${i.id}`,
+                    valueCents: i.price_paid_cents ?? i.price_cents,
+                    sliderMaxCents: Math.max(i.price_cents * 2, 20000),
+                  })}</td>
+                  <td><button type="button" class="danger btn-sm" data-remove-content-item="${i.id}">Remove</button></td>
+                </tr>`
+                )
+                .join('')}
+            </tbody>
+          </table>
+        `
+        : '<p class="muted">Nothing attached yet.</p>';
+
+      attached.forEach((i) => {
+        wirePriceSlider(listEl, `content-item-price-${i.id}`, async (priceCents) => {
+          await window.api.contentItem.setPricePaid(orderId, i.id, priceCents);
+          showToast('Price paid saved.');
+        });
+      });
+
+      listEl.querySelectorAll('[data-remove-content-item]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          await window.api.contentItem.removeFromOrder(orderId, Number(btn.dataset.removeContentItem));
+          await refreshContentItems();
+        });
+      });
+    }
+
+    await refreshContentItems();
 
     // ---- Attachments -----------------------------------------------------
 

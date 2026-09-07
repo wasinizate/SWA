@@ -9,6 +9,8 @@ function registerTagIpc() {
   ipcMain.handle('tag:listGroupedByPerson', () => tagRepo.listGroupedByPerson());
   ipcMain.handle('tag:addToPerson', (_event, personId, label) => tagRepo.addToPerson(personId, label));
   ipcMain.handle('tag:removeFromPerson', (_event, personId, tagId) => tagRepo.removeFromPerson(personId, tagId));
+  ipcMain.handle('tag:rename', (_event, tagId, newLabel) => tagRepo.rename(tagId, newLabel));
+  ipcMain.handle('tag:delete', (_event, tagId) => tagRepo.remove(tagId));
 }
 
 module.exports = { registerTagIpc };

@@ -6,6 +6,9 @@ import { renderPeopleView } from './people.js';
 import { renderPersonDetailView } from './personDetail.js';
 import { renderOrderDetailView } from './orderDetail.js';
 import { renderOrdersView } from './orders.js';
+import { renderContentLibraryView } from './contentLibrary.js';
+import { renderContentDetailView } from './contentDetail.js';
+import { renderAnalyticsView } from './analytics.js';
 import { renderCalendarView } from './calendar.js';
 import { renderSearchView } from './search.js';
 import { renderExpensesView } from './expenses.js';
@@ -40,6 +43,8 @@ export function renderShell(root, { onLocked }) {
           <li><button class="nav-link" data-view="dashboard">Dashboard</button></li>
           <li><button class="nav-link" data-view="people">Clients</button></li>
           <li><button class="nav-link" data-view="orders">Orders</button></li>
+          <li><button class="nav-link" data-view="contentLibrary">Content</button></li>
+          <li><button class="nav-link" data-view="analytics">Analytics</button></li>
           <li><button class="nav-link" data-view="calendar">Calendar</button></li>
           <li><button class="nav-link" data-view="expenses">Expenses</button></li>
           <li><button class="nav-link" data-view="settings">Settings</button></li>
@@ -63,6 +68,9 @@ export function renderShell(root, { onLocked }) {
     else if (viewName === 'personDetail') renderPersonDetailView(content, { navigate, personId: params.personId });
     else if (viewName === 'orderDetail') renderOrderDetailView(content, { navigate, orderId: params.orderId });
     else if (viewName === 'orders') renderOrdersView(content, { navigate });
+    else if (viewName === 'contentLibrary') renderContentLibraryView(content, { navigate });
+    else if (viewName === 'contentDetail') renderContentDetailView(content, { navigate, contentItemId: params.contentItemId });
+    else if (viewName === 'analytics') renderAnalyticsView(content, { navigate });
     else if (viewName === 'calendar') renderCalendarView(content, { navigate, focusOrderId: params.focusOrderId });
     else if (viewName === 'search') renderSearchView(content, { navigate, query: params.query });
     else if (viewName === 'expenses') renderExpensesView(content, { navigate });
@@ -125,8 +133,8 @@ function setUpSidebarSearch(root, navigate) {
     navigate(viewName, params);
   }
 
-  function renderResults(query, people, orders) {
-    if (people.length === 0 && orders.length === 0) {
+  function renderResults(query, people, orders, contentItems) {
+    if (people.length === 0 && orders.length === 0 && contentItems.length === 0) {
       dropdown.innerHTML = '<p class="muted">No matches.</p>';
       showDropdown();
       return;
@@ -148,12 +156,24 @@ function setUpSidebarSearch(root, navigate) {
       )
       .join('');
 
-    const total = people.length + orders.length;
-    const isCapped = people.length > SIDEBAR_SEARCH_PREVIEW_LIMIT || orders.length > SIDEBAR_SEARCH_PREVIEW_LIMIT;
+    const contentRows = contentItems
+      .slice(0, SIDEBAR_SEARCH_PREVIEW_LIMIT)
+      .map(
+        (c) =>
+          `<button type="button" class="sidebar-search-result" data-open-content="${c.id}">${escapeHtml(c.title)}</button>`
+      )
+      .join('');
+
+    const total = people.length + orders.length + contentItems.length;
+    const isCapped =
+      people.length > SIDEBAR_SEARCH_PREVIEW_LIMIT ||
+      orders.length > SIDEBAR_SEARCH_PREVIEW_LIMIT ||
+      contentItems.length > SIDEBAR_SEARCH_PREVIEW_LIMIT;
 
     dropdown.innerHTML = `
       ${people.length > 0 ? `<div class="sidebar-search-section-title">Clients</div>${peopleRows}` : ''}
       ${orders.length > 0 ? `<div class="sidebar-search-section-title">Orders</div>${orderRows}` : ''}
+      ${contentItems.length > 0 ? `<div class="sidebar-search-section-title">Content</div>${contentRows}` : ''}
       ${isCapped ? `<button type="button" class="sidebar-search-result sidebar-search-see-all" data-see-all>See all ${total} results</button>` : ''}
     `;
     showDropdown();
@@ -163,6 +183,9 @@ function setUpSidebarSearch(root, navigate) {
     });
     dropdown.querySelectorAll('[data-open-order]').forEach((btn) => {
       btn.addEventListener('click', () => openResult('orderDetail', { orderId: Number(btn.dataset.openOrder) }));
+    });
+    dropdown.querySelectorAll('[data-open-content]').forEach((btn) => {
+      btn.addEventListener('click', () => openResult('contentDetail', { contentItemId: Number(btn.dataset.openContent) }));
     });
     const seeAllBtn = dropdown.querySelector('[data-see-all]');
     if (seeAllBtn) {
@@ -177,9 +200,9 @@ function setUpSidebarSearch(root, navigate) {
       return;
     }
     const thisRequest = ++requestId;
-    const { people, orders } = await window.api.search.query(query);
+    const { people, orders, contentItems } = await window.api.search.query(query);
     if (thisRequest !== requestId) return; // superseded by a newer keystroke
-    renderResults(query, people, orders);
+    renderResults(query, people, orders, contentItems);
   }
 
   input.addEventListener('input', () => {

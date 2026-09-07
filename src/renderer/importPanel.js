@@ -107,9 +107,19 @@ export function renderImportPanel(container, { onImported } = {}) {
           <strong>Order changes</strong>
           ${renderChangesList(u.changes)}
           ${u.newAttachmentCount > 0 ? `<p class="hint">+ ${u.newAttachmentCount} new attachment(s)</p>` : ''}
+          ${u.newContentItemCount > 0 ? `<p class="hint">+ ${u.newContentItemCount} content item(s) attached</p>` : ''}
         </div>`
         )
         .join('')}
+      ${
+        preview.newPlaceholderContentItemCount > 0
+          ? `<p class="hint">
+              ${preview.newPlaceholderContentItemCount} content item(s) referenced here aren't in your Content
+              library yet -- they'll be added as title-only placeholders you can fill in (type, price, location)
+              afterward.
+            </p>`
+          : ''
+      }
     `;
 
     const applyUpdatesCheckboxHtml = hasChanges
@@ -163,6 +173,8 @@ export function renderImportPanel(container, { onImported } = {}) {
       const parts = [`${result.ordersImported} new order(s)`];
       if (result.ordersUpdated > 0) parts.push(`${result.ordersUpdated} updated`);
       if (result.attachmentsAdded > 0) parts.push(`${result.attachmentsAdded} new attachment(s)`);
+      if (result.contentItemsAttached > 0) parts.push(`${result.contentItemsAttached} content item(s) attached`);
+      if (result.contentItemsCreated > 0) parts.push(`${result.contentItemsCreated} new content library placeholder(s)`);
       previewBody.innerHTML = `<p class="hint">Imported to "${escapeHtml(result.personLabel)}": ${parts.join(', ')}.</p>`;
       container.querySelector('#import-file-input').value = '';
       container.querySelector('#import-passphrase').value = '';

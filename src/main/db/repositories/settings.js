@@ -139,6 +139,18 @@ function setSyncPassphraseBlob(blob) {
   setSetting('sync_passphrase_blob', blob || '');
 }
 
+// ---- Content library media scanner (see src/main/scanner/) -----------
+
+// The one root folder the scanner walks -- same "pick once, remember
+// it" shape as getSyncFolderPath()/setSyncFolderPath() above.
+function getContentLibraryRootPath() {
+  return getSetting('content_library_root_path', '');
+}
+
+function setContentLibraryRootPath(folderPath) {
+  setSetting('content_library_root_path', folderPath || '');
+}
+
 // ---- Network access lock (see src/main/security/networkGuard.js) -----
 
 // Master switch for every network-capable feature in the app -- locked
@@ -181,6 +193,8 @@ module.exports = {
   setSyncEnabled,
   getSyncPassphraseBlob,
   setSyncPassphraseBlob,
+  getContentLibraryRootPath,
+  setContentLibraryRootPath,
   getNetworkAccessEnabled,
   setNetworkAccessEnabled,
 };

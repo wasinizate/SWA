@@ -73,7 +73,15 @@ process(es) and re-run `npm start`.
   table). Add a new numbered file for schema changes; never edit an
   already-shipped migration.
 - `src/main/db/repositories/*.js` — the only place raw SQL is written.
-  IPC handlers call these, never construct SQL themselves.
+  IPC handlers call these, never construct SQL themselves. A repository
+  with no table of its own is fine when it composes queries across
+  others (e.g. `search.js`, `analytics.js`).
+- Business logic that mixes filesystem/OS access with app logic lives
+  outside `db/repositories/` in its own top-level `src/main/*/` folder
+  instead — e.g. `src/main/sync/` (shared-folder sync) and
+  `src/main/scanner/` (content library media folder scanner). These
+  still call into `db/repositories/*.js` for any actual SQL rather than
+  querying the database directly.
 - Money is always stored as integer cents (never floats). Timestamps are
   ISO-8601 UTC strings; the renderer converts to/from the browser's local
   time only at the form boundary (`toDatetimeLocalValue`/

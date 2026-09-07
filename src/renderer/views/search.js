@@ -16,7 +16,11 @@ const DEBOUNCE_MS = 200;
 export function renderSearchView(container, { navigate, query: initialQuery }) {
   container.innerHTML = `
     <h1>Search</h1>
-    <p class="muted">Search clients (label, notes, platform handles) and orders (description, feedback, payment method).</p>
+    <p class="muted">
+      Search clients (label, notes, platform handles), orders (description, feedback, payment
+      method), and content items (title, description, type) -- tags on any of them count too, so a
+      tag search surfaces both the clients who want it and the content that has it.
+    </p>
 
     <div class="toolbar">
       <input type="search" id="search-input" placeholder="Type at least ${MIN_QUERY_LENGTH} characters…" autofocus />
@@ -37,8 +41,8 @@ export function renderSearchView(container, { navigate, query: initialQuery }) {
     resultsEl.innerHTML = `<p class="muted">${escapeHtml(message)}</p>`;
   }
 
-  function renderResults(people, orders) {
-    if (people.length === 0 && orders.length === 0) {
+  function renderResults(people, orders, contentItems) {
+    if (people.length === 0 && orders.length === 0 && contentItems.length === 0) {
       renderMessage('No matches.');
       return;
     }
@@ -55,7 +59,17 @@ export function renderSearchView(container, { navigate, query: initialQuery }) {
             .map(
               (p) => `
             <tr>
-              <td><button class="link-button" data-open-person="${p.id}">${escapeHtml(p.private_label)}</button></td>
+              <td>
+                <button class="link-button" data-open-person="${p.id}">${escapeHtml(p.private_label)}</button>
+                ${
+                  p.matched_tags
+                    ? `<div class="tag-list">${p.matched_tags
+                        .split(', ')
+                        .map((label) => `<span class="tag-chip" title="Matched via tag">🏷 ${escapeHtml(label)}</span>`)
+                        .join('')}</div>`
+                    : ''
+                }
+              </td>
               <td><div class="description-preview">${escapeHtml(previewText(p.general_notes || p.screening_notes))}</div></td>
             </tr>`
             )
@@ -92,7 +106,38 @@ export function renderSearchView(container, { navigate, query: initialQuery }) {
         </tbody>
       </table>`;
 
-    resultsEl.innerHTML = peopleSection + ordersSection;
+    const contentSection =
+      contentItems.length === 0
+        ? ''
+        : `
+      <h2>Content (${contentItems.length})</h2>
+      <table class="data-table">
+        <thead><tr><th>Title</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          ${contentItems
+            .map(
+              (c) => `
+            <tr>
+              <td>
+                <button class="link-button" data-open-content="${c.id}">${escapeHtml(c.title)}</button>
+                ${
+                  c.matched_tags
+                    ? `<div class="tag-list">${c.matched_tags
+                        .split(', ')
+                        .map((label) => `<span class="tag-chip" title="Matched via tag">🏷 ${escapeHtml(label)}</span>`)
+                        .join('')}</div>`
+                    : ''
+                }
+              </td>
+              <td>${escapeHtml(c.content_type)}</td>
+              <td><div class="description-preview">${escapeHtml(previewText(c.description))}</div></td>
+            </tr>`
+            )
+            .join('')}
+        </tbody>
+      </table>`;
+
+    resultsEl.innerHTML = peopleSection + ordersSection + contentSection;
 
     resultsEl.querySelectorAll('[data-open-person]').forEach((btn) => {
       btn.addEventListener('click', () => navigate('personDetail', { personId: Number(btn.dataset.openPerson) }));
@@ -102,6 +147,9 @@ export function renderSearchView(container, { navigate, query: initialQuery }) {
     });
     resultsEl.querySelectorAll('[data-open-calendar]').forEach((btn) => {
       btn.addEventListener('click', () => navigate('calendar', { focusOrderId: Number(btn.dataset.openCalendar) }));
+    });
+    resultsEl.querySelectorAll('[data-open-content]').forEach((btn) => {
+      btn.addEventListener('click', () => navigate('contentDetail', { contentItemId: Number(btn.dataset.openContent) }));
     });
   }
 
@@ -113,10 +161,10 @@ export function renderSearchView(container, { navigate, query: initialQuery }) {
     }
 
     const thisRequest = ++requestId;
-    const { people, orders } = await window.api.search.query(query);
+    const { people, orders, contentItems } = await window.api.search.query(query);
     if (thisRequest !== requestId) return; // superseded by a newer keystroke
 
-    renderResults(people, orders);
+    renderResults(people, orders, contentItems);
   }
 
   input.addEventListener('input', () => {

@@ -33,17 +33,18 @@ function create({ privateLabel, generalNotes = '', screeningNotes = '' }) {
   return get(result.lastInsertRowid);
 }
 
-function update(id, { privateLabel, generalNotes, screeningNotes, isShared }) {
+function update(id, { privateLabel, generalNotes, screeningNotes, isShared, priority }) {
   const existing = get(id);
   if (!existing) throw new Error(`Person ${id} not found.`);
 
   getDb()
-    .prepare('UPDATE persons SET private_label = ?, general_notes = ?, screening_notes = ?, is_shared = ? WHERE id = ?')
+    .prepare('UPDATE persons SET private_label = ?, general_notes = ?, screening_notes = ?, is_shared = ?, priority = ? WHERE id = ?')
     .run(
       privateLabel !== undefined ? privateLabel.trim() : existing.private_label,
       generalNotes !== undefined ? generalNotes : existing.general_notes,
       screeningNotes !== undefined ? screeningNotes : existing.screening_notes,
       isShared !== undefined ? (isShared ? 1 : 0) : existing.is_shared,
+      priority !== undefined ? priority : existing.priority,
       id
     );
   return get(id);

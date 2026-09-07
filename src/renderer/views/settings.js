@@ -112,11 +112,21 @@ export function renderSettingsView(container, { navigate } = {}) {
     </section>
 
     <section class="card">
+      <h2>Tags</h2>
+      <p class="hint">Rename to fix a typo, or delete one that's no longer useful -- both apply everywhere the tag is used.</p>
+      <div id="tag-management-body">${loadingHtml()}</div>
+    </section>
+
+    <section class="card">
       <h2>Shared-folder sync</h2>
       <p class="hint">
         Keeps clients marked "Shared with collaborators" in sync via a
         folder (Dropbox, OneDrive, etc.) -- no network calls of its own.
-        Incoming changes always need your review below.
+        Incoming changes always need your review below. Runs in the
+        background every 15 minutes while enabled below, or hit "Sync
+        now" any time to push/pull immediately -- that works even with
+        background sync turned off, as long as a folder and passphrase
+        are set.
       </p>
       <div id="sync-body">${loadingHtml()}</div>
     </section>
@@ -157,6 +167,7 @@ export function renderSettingsView(container, { navigate } = {}) {
     renderRecovery(status);
     renderImportPanel(container.querySelector('#import-panel-body'));
     refreshPriceTemplates();
+    refreshTagManagement();
     refreshSync();
     refreshNetworkAccess();
 
@@ -524,6 +535,93 @@ export function renderSettingsView(container, { navigate } = {}) {
 
   container.querySelector('#new-price-template-btn').addEventListener('click', () => openPriceTemplateModal(null));
 
+  // ---- Tags --------------------------------------------------------------
+  // Renaming/deleting here affects the one shared `tags` row, not a
+  // per-client copy -- see src/main/db/repositories/tag.js. No modal for
+  // rename: a single text field doesn't need one, so it swaps in place
+  // like an inline edit.
+
+  // A tag is shared between clients (person_tags) and content items
+  // (content_item_tags) -- see tag.js's listAll() comment -- so "used
+  // by" has to report both, not just the client count, or deleting a
+  // content-only tag would look consequence-free when it isn't.
+  function tagUsagePhrase(tag) {
+    const parts = [];
+    if (tag.usage_count > 0) parts.push(`${tag.usage_count} client${tag.usage_count === 1 ? '' : 's'}`);
+    if (tag.content_usage_count > 0) parts.push(`${tag.content_usage_count} content item${tag.content_usage_count === 1 ? '' : 's'}`);
+    return parts.length ? parts.join(', ') : 'Unused';
+  }
+
+  async function refreshTagManagement() {
+    const tags = await window.api.tag.listAll();
+    const body = container.querySelector('#tag-management-body');
+
+    body.innerHTML = tags.length
+      ? `
+        <table class="data-table">
+          <thead><tr><th>Label</th><th>Used by</th><th></th></tr></thead>
+          <tbody>
+            ${tags
+              .map(
+                (t) => `
+              <tr data-tag-row="${t.id}">
+                <td class="tag-label-cell">${escapeHtml(t.label)}</td>
+                <td>${tagUsagePhrase(t)}</td>
+                <td class="row-actions">
+                  <button type="button" class="btn-secondary btn-sm" data-rename-tag="${t.id}">Rename</button>
+                  <button type="button" class="danger btn-sm" data-delete-tag="${t.id}">Delete</button>
+                </td>
+              </tr>`
+              )
+              .join('')}
+          </tbody>
+        </table>`
+      : '<p class="muted">No tags yet -- add one from a client\'s or content item\'s page.</p>';
+
+    body.querySelectorAll('[data-rename-tag]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const tag = tags.find((t) => t.id === Number(btn.dataset.renameTag));
+        startRenamingTag(body.querySelector(`[data-tag-row="${tag.id}"]`), tag);
+      });
+    });
+
+    body.querySelectorAll('[data-delete-tag]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const tag = tags.find((t) => t.id === Number(btn.dataset.deleteTag));
+        const isUnused = tag.usage_count === 0 && tag.content_usage_count === 0;
+        const consequence = isUnused ? "it isn't used anywhere yet" : `it will be removed from ${tagUsagePhrase(tag)}`;
+        if (!confirm(`Delete the tag "${tag.label}"? ${consequence[0].toUpperCase()}${consequence.slice(1)}.`)) return;
+        await window.api.tag.delete(tag.id);
+        showToast('Tag deleted.');
+        await refreshTagManagement();
+      });
+    });
+  }
+
+  function startRenamingTag(row, tag) {
+    const cell = row.querySelector('.tag-label-cell');
+    cell.innerHTML = `
+      <form class="inline-form" id="rename-tag-form">
+        <input type="text" value="${escapeHtml(tag.label)}" required autofocus />
+        <button type="submit" class="btn-secondary btn-sm">Save</button>
+        <button type="button" class="btn-secondary btn-sm" id="rename-tag-cancel">Cancel</button>
+      </form>
+    `;
+
+    cell.querySelector('#rename-tag-cancel').addEventListener('click', refreshTagManagement);
+    cell.querySelector('#rename-tag-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const newLabel = cell.querySelector('input').value;
+      try {
+        await window.api.tag.rename(tag.id, newLabel);
+        showToast('Tag renamed.');
+        await refreshTagManagement();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  }
+
   // ---- Shared-folder sync ------------------------------------------------
 
   async function refreshSync() {
@@ -534,9 +632,12 @@ export function renderSettingsView(container, { navigate } = {}) {
   function renderSync(status) {
     const body = container.querySelector('#sync-body');
     body.innerHTML = `
-      <label class="checkbox-label">
-        <input type="checkbox" id="sync-enabled" ${status.enabled ? 'checked' : ''} /> Enable shared-folder sync
-      </label>
+      <div class="inline-form">
+        <label class="checkbox-label">
+          <input type="checkbox" id="sync-enabled" ${status.enabled ? 'checked' : ''} /> Enable shared-folder sync
+        </label>
+        <button type="button" class="btn-secondary" id="sync-now">Sync now</button>
+      </div>
       <label>
         Sync folder
         <div class="inline-form">
@@ -563,6 +664,27 @@ export function renderSettingsView(container, { navigate } = {}) {
     body.querySelector('#sync-enabled').addEventListener('change', async (event) => {
       await window.api.sync.setEnabled(event.target.checked);
       showToast(event.target.checked ? 'Sync enabled.' : 'Sync disabled.');
+    });
+
+    body.querySelector('#sync-now').addEventListener('click', async () => {
+      const btn = body.querySelector('#sync-now');
+      btn.disabled = true;
+      const previousLabel = btn.textContent;
+      btn.textContent = 'Syncing…';
+      try {
+        const result = await window.api.sync.runNow();
+        showToast(
+          result.newPendingCount > 0
+            ? `Synced. ${result.newPendingCount} update(s) waiting for your review below.`
+            : 'Synced. Nothing new.'
+        );
+        await refreshPending();
+      } catch (err) {
+        showToast(err.message || 'Sync failed.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = previousLabel;
+      }
     });
 
     body.querySelector('#sync-choose-folder').addEventListener('click', async () => {
@@ -634,9 +756,18 @@ export function renderSettingsView(container, { navigate } = {}) {
           <strong>Order changes</strong>
           ${renderChangesList(u.changes)}
           ${u.newAttachmentCount > 0 ? `<p class="hint">+ ${u.newAttachmentCount} new attachment(s)</p>` : ''}
+          ${u.newContentItemCount > 0 ? `<p class="hint">+ ${u.newContentItemCount} content item(s) attached</p>` : ''}
         </div>`
         )
         .join('')}
+      ${
+        preview.newPlaceholderContentItemCount > 0
+          ? `<p class="hint">
+              ${preview.newPlaceholderContentItemCount} content item(s) referenced here aren't in your Content
+              library yet -- they'll be added as title-only placeholders you can fill in afterward.
+            </p>`
+          : ''
+      }
     `;
 
     if (preview.resolved) {

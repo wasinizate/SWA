@@ -21,6 +21,11 @@ function registerSyncIpc() {
     return enabled;
   });
 
+  // "Sync now" button -- runs one cycle immediately instead of waiting on
+  // the 15-minute background poll (see syncScheduler.js's runNow()).
+  // Throws (surfaced as a toast) if a folder/passphrase isn't set up yet.
+  ipcMain.handle('sync:runNow', () => syncScheduler.runNow());
+
   // Combines "choose a folder" + "remember it" in one call, same shape
   // as dataExchangeIpc.js's exportAndSave combining dialog + write.
   ipcMain.handle('sync:pickFolder', async (event) => {

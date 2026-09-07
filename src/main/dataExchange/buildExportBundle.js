@@ -10,8 +10,16 @@ const personRepo = require('../db/repositories/person');
 const orderRepo = require('../db/repositories/order');
 const platformAccountRepo = require('../db/repositories/platformAccount');
 const orderAttachmentRepo = require('../db/repositories/orderAttachment');
+const contentItemRepo = require('../db/repositories/contentItem');
 
-const FORMAT_VERSION = 1;
+// Bumped from 1 -> 2 when each order started carrying its attached
+// content items (see the `contentItems` field below) -- decryptExport.js
+// enforces an exact match, so an old install can't half-understand a
+// newer bundle; it gets a clear "incompatible version" error instead of
+// silently importing everything except the content-item links, same
+// "never half-apply something silently" posture as the rest of this
+// module.
+const FORMAT_VERSION = 2;
 
 function buildPersonExport(personId, { orderIds = null } = {}) {
   const person = personRepo.get(personId);
@@ -48,6 +56,18 @@ function buildPersonExport(personId, { orderIds = null } = {}) {
       };
     });
 
+    // Which content items were part of this order, carried by portable
+    // external_id (not the local content_items.id -- meaningless outside
+    // this database) plus a title fallback for when the receiving side
+    // has never seen this item before (see applyImport.js's
+    // resolveContentItemId()). pricePaidCents rides along per item since
+    // it's specific to *this* order's sale of it, not the item itself.
+    const contentItems = contentItemRepo.listForOrder(order.id).map((item) => ({
+      externalId: contentItemRepo.ensureExternalId(item.id),
+      title: item.title,
+      pricePaidCents: item.price_paid_cents,
+    }));
+
     // Every field that applyImport.js's ORDER_UPDATE_FIELDS knows how to
     // diff/update gets exported -- this is meant to support genuine
     // back-and-forth (assistant quotes and takes payment, model updates
@@ -66,6 +86,7 @@ function buildPersonExport(personId, { orderIds = null } = {}) {
       feedbackNotes: order.feedback_notes,
       wouldRepeat: order.would_repeat,
       attachments,
+      contentItems,
     };
   });
 

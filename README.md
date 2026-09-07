@@ -18,6 +18,11 @@ Orders (who bought what)
 Payments (who paid, when, and for what)
 Delivery promises and deadlines
 Overall workloads outside of scheduled posts
+Tags shared across clients and content, so you know who wants what and
+what you have that matches
+A content library — typed by hand or scanned in from a real folder on
+disk — with sales stats and analytics (top spenders, revenue by
+priority/platform, trends over time)
 
 Very few tools address these specific needs. Existing options are usually built for agencies or repurposed from something else. This one is designed from the ground up to keep your work organized, private, and manageable.
 
@@ -54,8 +59,9 @@ Both are expected for an early release without a paid signing
 certificate, not a sign anything is wrong.)
 
 The first launch will ask you to set a passphrase — this encrypts the
-database file. **There is no password reset.** Write your passphrase down
-somewhere safe outside the app.
+database file. Write your passphrase down somewhere safe outside the
+app; Settings also lets you generate a one-time recovery phrase as a
+backup way in if you forget it (see the Security model section below).
 
 <img width="1331" height="845" alt="Screenshot 2026-08-15 210835" src="https://github.com/user-attachments/assets/7d0400f2-f917-4278-ace7-c8f5147df1bf" />
 <img width="1086" height="743" alt="Screenshot 2026-08-15 210815" src="https://github.com/user-attachments/assets/a1e9aabe-0d0f-4dae-bef7-e5e6f6aa81c7" />
@@ -88,6 +94,7 @@ src/
 ├── main/            # Electron main process (Node.js side)
 │   ├── db/            # SQLite connection, migrations, repositories (SQL)
 │   ├── security/       # Passphrase/vault lifecycle, auto-lock
+│   ├── scanner/         # Content library media folder scanner (filesystem walk)
 │   ├── ipc/            # ipcMain.handle() registrations, grouped by domain
 │   ├── index.js         # App entry point / lifecycle
 │   └── window.js         # BrowserWindow factory (secure webPreferences)
@@ -110,13 +117,39 @@ sandboxed preload); see
   this kind of app), but kept as "Person" in the schema, code, and IPC
   channel names throughout -- a display-label choice, not a data-model
   one. Identified by a private label you choose (not necessarily their
-  real name), plus general and screening notes.
+  real name), plus general and screening notes, and a priority flag
+  (Low priority / Normal / VIP).
 - **PlatformAccount** — a platform + username/handle belonging to a
   Person, with a verified flag. Platform names are free text so any
   platform works, not just a fixed list.
 - **Order** — a transaction tied to a Person (and optionally a specific
   PlatformAccount): amount, currency, dates, payment method, status,
-  description, file attachments, feedback/reflection notes.
+  description, file attachments, feedback/reflection notes, and any
+  ContentItems that were part of the sale.
+- **Tag** — a single shared label vocabulary used by both Persons (what
+  a client is into) and ContentItems (what a piece of content is), so
+  the same tag connects "who wants this" to "what matches it" — visible
+  in search results, not just each entity's own tag list.
+- **ContentItem** — a catalog entry for something you've made (a video,
+  a picture set, etc.): title, type, description, a location (a folder
+  path, drive label, or link — never the media file itself), a
+  suggested price, tags, and sales stats derived from the Orders it's
+  attached to. Either typed in by hand or discovered by the content
+  library's media folder scanner (Content library → choose a folder →
+  Scan now), which indexes file names/sizes/dates only, never file
+  contents. A scanned item's individual files can each carry their own
+  suggested price too (e.g. one video priced separately from the set
+  it's bundled in), and attaching an item to an Order can record a
+  "price paid" override for that specific sale — useful when an order
+  bundles several items together or sells at a discount, so per-item
+  revenue isn't just the whole order's amount double-counted across
+  everything attached to it. Content items themselves are never part of
+  a client/order export or shared-folder sync (there's no media file to
+  send, and the whole point of this app is that it never leaves your
+  machine) — but the *fact* that an order included one does travel: a
+  portable id lets the receiving install match an already-cataloged
+  item by that id or by an exact title match, and falls back to adding
+  a title-only placeholder rather than silently dropping the link.
 - **CalendarEvent** — a date/time on the calendar, optionally linked to
   an Order (e.g. its delivery due date).
 - **Expense** — a business cost (date, amount, free-text category,
@@ -154,6 +187,11 @@ stored as integer cents to avoid floating-point rounding errors).
   invalidates any existing recovery phrase, since it only unlocks back
   to the passphrase it was created against — the app tells you when
   this happens so you can generate a new one.
+- Content library → the media folder scanner reads only folder and file
+  **names**, extensions, sizes, and modified dates from a folder you
+  point it at — it never opens, copies, or reads the contents of any
+  media file, and (like everything else in this app) never sends
+  anything over the network.
 - Your passphrase is **never stored in plaintext**. By default it isn't
   stored anywhere at all — you re-enter it every time you unlock,
   including after auto-lock. There's an *opt-in* "quick unlock" setting

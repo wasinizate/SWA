@@ -56,6 +56,8 @@ contextBridge.exposeInMainWorld('api', {
     listGroupedByPerson: () => ipcRenderer.invoke('tag:listGroupedByPerson'),
     addToPerson: (personId, label) => ipcRenderer.invoke('tag:addToPerson', personId, label),
     removeFromPerson: (personId, tagId) => ipcRenderer.invoke('tag:removeFromPerson', personId, tagId),
+    rename: (tagId, newLabel) => ipcRenderer.invoke('tag:rename', tagId, newLabel),
+    delete: (tagId) => ipcRenderer.invoke('tag:delete', tagId),
   },
   priceTemplate: {
     listAll: () => ipcRenderer.invoke('priceTemplate:listAll'),
@@ -102,6 +104,38 @@ contextBridge.exposeInMainWorld('api', {
   },
   search: {
     query: (queryText) => ipcRenderer.invoke('search:query', queryText),
+  },
+  contentItem: {
+    listAll: () => ipcRenderer.invoke('contentItem:listAll'),
+    get: (id) => ipcRenderer.invoke('contentItem:get', id),
+    create: (data) => ipcRenderer.invoke('contentItem:create', data),
+    update: (id, data) => ipcRenderer.invoke('contentItem:update', id, data),
+    delete: (id) => ipcRenderer.invoke('contentItem:delete', id),
+    listTagsFor: (contentItemId) => ipcRenderer.invoke('contentItem:listTagsFor', contentItemId),
+    addTag: (contentItemId, label) => ipcRenderer.invoke('contentItem:addTag', contentItemId, label),
+    removeTag: (contentItemId, tagId) => ipcRenderer.invoke('contentItem:removeTag', contentItemId, tagId),
+    listForOrder: (orderId) => ipcRenderer.invoke('contentItem:listForOrder', orderId),
+    addToOrder: (orderId, contentItemId) => ipcRenderer.invoke('contentItem:addToOrder', orderId, contentItemId),
+    removeFromOrder: (orderId, contentItemId) => ipcRenderer.invoke('contentItem:removeFromOrder', orderId, contentItemId),
+    setPricePaid: (orderId, contentItemId, priceCents) =>
+      ipcRenderer.invoke('contentItem:setPricePaid', orderId, contentItemId, priceCents),
+    findByTitle: (title) => ipcRenderer.invoke('contentItem:findByTitle', title),
+    getSalesDetail: (contentItemId) => ipcRenderer.invoke('contentItem:getSalesDetail', contentItemId),
+    listFiles: (contentItemId) => ipcRenderer.invoke('contentItem:listFiles', contentItemId),
+    setFilePrices: (contentItemId, updates) => ipcRenderer.invoke('contentItem:setFilePrices', contentItemId, updates),
+  },
+  contentScan: {
+    getRootPath: () => ipcRenderer.invoke('contentScan:getRootPath'),
+    pickRootPath: () => ipcRenderer.invoke('contentScan:pickRootPath'),
+    run: () => ipcRenderer.invoke('contentScan:run'),
+    openPath: (targetPath) => ipcRenderer.invoke('contentScan:openPath', targetPath),
+  },
+  analytics: {
+    getOverview: () => ipcRenderer.invoke('analytics:getOverview'),
+    getTopSpenders: (limit) => ipcRenderer.invoke('analytics:getTopSpenders', limit),
+    getRevenueByPriority: () => ipcRenderer.invoke('analytics:getRevenueByPriority'),
+    getRevenueByPlatform: () => ipcRenderer.invoke('analytics:getRevenueByPlatform'),
+    getMonthlyRevenueTrend: (months) => ipcRenderer.invoke('analytics:getMonthlyRevenueTrend', months),
   },
   expense: {
     listAll: () => ipcRenderer.invoke('expense:listAll'),
@@ -166,6 +200,7 @@ contextBridge.exposeInMainWorld('api', {
   sync: {
     getStatus: () => ipcRenderer.invoke('sync:getStatus'),
     setEnabled: (enabled) => ipcRenderer.invoke('sync:setEnabled', enabled),
+    runNow: () => ipcRenderer.invoke('sync:runNow'),
     pickFolder: () => ipcRenderer.invoke('sync:pickFolder'),
     setPassphrase: (passphrase) => ipcRenderer.invoke('sync:setPassphrase', passphrase),
     clearPassphrase: () => ipcRenderer.invoke('sync:clearPassphrase'),
