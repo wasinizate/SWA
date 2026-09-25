@@ -23,6 +23,12 @@ what you have that matches
 A content library — typed by hand or scanned in from a real folder on
 disk — with sales stats and analytics (top spenders, revenue by
 priority/platform, trends over time)
+A quick per-client activity log and follow-up queue, so what was
+promised and who needs a nudge is never just left in your memory
+A "/" command palette in the search bar (Ctrl+K/Cmd+K from anywhere) --
+/reminder, /add-event, and a jump-to shortcut for every page
+A sortable, recently-viewed-aware Clients list, so "who deserves my
+attention right now" is a glance, not a re-search
 
 Very few tools address these specific needs. Existing options are usually built for agencies or repurposed from something else. This one is designed from the ground up to keep your work organized, private, and manageable.
 
@@ -118,10 +124,36 @@ sandboxed preload); see
   channel names throughout -- a display-label choice, not a data-model
   one. Identified by a private label you choose (not necessarily their
   real name), plus general and screening notes, and a priority flag
-  (Low priority / Normal / VIP).
+  (Low priority / Normal / VIP). A client's own page also shows a
+  Client value snapshot (lifetime spend, 30/90-day spend, order count,
+  average order, last purchase) and Content matches (library items
+  sharing a tag with this client that they haven't already bought yet).
+- **PersonInteraction** — a quick-logged, append-only timeline entry on
+  a client (a preset type like Note/Custom request/Payment promise/Risk
+  flag, plus free text) -- distinct from the general/screening notes
+  above, which are single fields overwritten in place rather than a
+  history. An entry can optionally carry a follow-up due date, which
+  puts it in the cross-client **Follow-ups** queue (its own nav item,
+  not folded into the Calendar) until marked done.
 - **PlatformAccount** — a platform + username/handle belonging to a
   Person, with a verified flag. Platform names are free text so any
-  platform works, not just a fixed list.
+  platform works, not just a fixed list. Adding one that's already
+  linked to a *different* client prompts first, since a handle showing
+  up twice is almost always a mistake or a client managed under two
+  separate records.
+- **PersonLink** — a lightweight, reversible note that two clients might
+  be connected (the same person under a second account, a couple who
+  both message you, a known "backup" account) *without* committing to a
+  merge — nothing about either client changes, just a note on both
+  pages. Reached via the 🔗 icon next to a client's name (opens the
+  Clients list in a search-and-pick mode) or Settings' on-demand
+  "Possible duplicate clients" check (same handle reused, a handle
+  reused across platforms, or a near-identical label). Either path also
+  offers the real fix once you're sure — merging (person.js's
+  `mergeInto()`): everything the other client owns moves onto one
+  record and the other is deleted, permanently. Nothing here is ever
+  automatic — always a human decision, since merging the wrong two
+  people can't be undone.
 - **Order** — a transaction tied to a Person (and optionally a specific
   PlatformAccount): amount, currency, dates, payment method, status,
   description, file attachments, feedback/reflection notes, and any
@@ -154,10 +186,15 @@ sandboxed preload); see
   an Order (e.g. its delivery due date).
 - **Expense** — a business cost (date, amount, free-text category,
   description), independent of any Person/Order.
-- **IncomeStatement** — a manually-entered total from a platform's
-  periodic pay statement (period, platform, gross/fees/net, and
-  attachments for the source PDF) — an approximation tool, not parsed
-  automatically from the PDF (see the Expenses tab in-app for why).
+- **IncomeStatement** — a total from a platform's periodic pay statement
+  (period, platform, gross/fees/net, and attachments for the source
+  PDF) — an approximation tool, entered by hand, imported from a PDF
+  (best-effort guess pre-filling the same editable fields, with the raw
+  extracted text shown to double-check against), or imported in bulk
+  from a CSV export (any column layout, via an explicit mapping step).
+  Every path lands in the same fields and nothing is ever written
+  without landing in front of a human first — see the Expenses tab
+  in-app.
 
 See [`src/main/db/migrations/0001_init.sql`](src/main/db/migrations/0001_init.sql)
 for the full schema and comments on specific choices (e.g. money is
@@ -218,11 +255,18 @@ stored as integer cents to avoid floating-point rounding errors).
   install` pulls a small, deliberately short dependency list — check
   `package.json` yourself. Runtime dependencies:
   [`better-sqlite3-multiple-ciphers`](https://github.com/m4heshd/better-sqlite3-multiple-ciphers)
-  (database encryption) and [FullCalendar](https://fullcalendar.io/)
+  (database encryption), [FullCalendar](https://fullcalendar.io/)
   (MIT-licensed; its "global" build is vendored locally at install time
   by `scripts/copy-vendor-assets.js` rather than loaded from a CDN, to
-  keep the app fully offline — see that file's comments). Electron and
-  electron-builder are dev tooling.
+  keep the app fully offline — see that file's comments), and `qrcode`
+  (order/calendar QR codes). PDF text extraction for the Expenses page's
+  "Import statement from PDF" (see
+  [`src/main/incomeImport/pdf/`](src/main/incomeImport/pdf/)) is this
+  project's own minimal PDF reader, not a dependency at all — it used to
+  be `pdf-parse`, dropped once it turned out that package vendors its
+  own old copy of pdf.js's parser as bundled source rather than an npm
+  dependency, which meant `npm audit` could never see (or ever flag)
+  CVEs in it. Electron and electron-builder are dev tooling.
 
 ### Threat model
 

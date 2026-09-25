@@ -21,6 +21,7 @@ import {
 } from '../helpers.js';
 import { createAttachmentGrid } from '../attachmentGrid.js';
 import { showToast } from '../toast.js';
+import { openPdfStatementImportModal, openCsvStatementImportModal } from '../incomeStatementImport.js';
 
 function todayDateInputValue() {
   return toDateInputValue(new Date().toISOString());
@@ -104,10 +105,17 @@ export function renderExpensesView(container, { navigate }) {
     <section class="card">
       <div class="section-header">
         <h2>Income statements</h2>
+        <div class="row-actions">
+          <button type="button" class="btn-secondary" id="import-statement-pdf-btn">Import from PDF…</button>
+          <button type="button" class="btn-secondary" id="import-statement-csv-btn">Import from CSV…</button>
+        </div>
       </div>
       <p class="hint">
         Manually-entered totals from a platform's pay statement (e.g. an
-        OnlyFans payout summary) -- attach the source PDF as backup.
+        OnlyFans payout summary) -- attach the source PDF as backup. Or
+        import: PDF import guesses the numbers from the file's text (always
+        double-check before saving); CSV import maps a platform export's own
+        columns onto these same fields, one statement per row.
       </p>
       <form id="statement-form" class="inline-form">
         <label>From <input type="date" id="statement-period-start" required /></label>
@@ -391,6 +399,18 @@ export function renderExpensesView(container, { navigate }) {
   }
   container.querySelector('#statement-gross').addEventListener('blur', autoFillNet);
   container.querySelector('#statement-fees').addEventListener('blur', autoFillNet);
+
+  async function onStatementImported() {
+    await refreshStatements();
+    await refreshSummary();
+  }
+
+  container.querySelector('#import-statement-pdf-btn').addEventListener('click', () => {
+    openPdfStatementImportModal({ onImported: onStatementImported });
+  });
+  container.querySelector('#import-statement-csv-btn').addEventListener('click', () => {
+    openCsvStatementImportModal({ onImported: onStatementImported });
+  });
 
   container.querySelector('#statement-form').addEventListener('submit', async (event) => {
     event.preventDefault();

@@ -10,10 +10,8 @@ import { renderImportPanel, renderChangesList } from '../importPanel.js';
 import { openModal } from '../modal.js';
 import { promptForPassphrase } from '../exportPassphrasePrompt.js';
 import { createLineItemRows } from '../lineItemRows.js';
+import { openPersonLinkModal } from '../personLinkModal.js';
 
-// Accepts { navigate } for signature consistency with every other view
-// (shell.js always passes it) -- not currently used here since this
-// page has no navigation of its own.
 export function renderSettingsView(container, { navigate } = {}) {
   container.innerHTML = `
     <h1>Settings</h1>
@@ -115,6 +113,18 @@ export function renderSettingsView(container, { navigate } = {}) {
       <h2>Tags</h2>
       <p class="hint">Rename to fix a typo, or delete one that's no longer useful -- both apply everywhere the tag is used.</p>
       <div id="tag-management-body">${loadingHtml()}</div>
+    </section>
+
+    <section class="card">
+      <h2>Possible duplicate clients</h2>
+      <p class="hint">
+        Checks for the same platform handle linked to two different clients, the same username reused
+        across platforms, or near-identical client labels -- a suggestion to review, never applied
+        automatically. Run on demand rather than in the background, since it's not something that
+        needs checking constantly.
+      </p>
+      <button type="button" class="btn-secondary" id="check-duplicates-btn">Check now</button>
+      <div id="duplicates-body"></div>
     </section>
 
     <section class="card">
@@ -619,6 +629,76 @@ export function renderSettingsView(container, { navigate } = {}) {
       } catch (err) {
         alert(err.message);
       }
+    });
+  }
+
+  // ---- Possible duplicate clients (see personDuplicates.js) -----------
+
+  const DUPLICATE_TIER_LABELS = {
+    exact_account: 'Same platform account linked twice',
+    cross_platform_username: 'Same username, different platforms',
+    similar_label: 'Near-identical client label',
+  };
+
+  container.querySelector('#check-duplicates-btn').addEventListener('click', async () => {
+    const btn = container.querySelector('#check-duplicates-btn');
+    btn.disabled = true;
+    const body = container.querySelector('#duplicates-body');
+    body.innerHTML = loadingHtml();
+    try {
+      await refreshDuplicates();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  async function refreshDuplicates() {
+    const candidates = await window.api.person.findDuplicateCandidates();
+    const body = container.querySelector('#duplicates-body');
+
+    if (candidates.length === 0) {
+      body.innerHTML = '<p class="muted">No possible duplicates found.</p>';
+      return;
+    }
+
+    body.innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Clients</th><th>Why</th><th>Detail</th><th></th></tr></thead>
+        <tbody>
+          ${candidates
+            .map(
+              (c, i) => `
+            <tr>
+              <td>${escapeHtml(c.personALabel)} / ${escapeHtml(c.personBLabel)}</td>
+              <td>${escapeHtml(DUPLICATE_TIER_LABELS[c.tier] || c.tier)}</td>
+              <td>${escapeHtml(c.detail)}</td>
+              <td class="row-actions">
+                <button type="button" class="btn-secondary btn-sm" data-view-candidate="${i}" data-person-a="${c.personAId}">View A</button>
+                <button type="button" class="btn-secondary btn-sm" data-view-candidate="${i}" data-person-b="${c.personBId}">View B</button>
+                <button type="button" class="btn-secondary btn-sm" data-merge-candidate="${i}">Link or merge…</button>
+              </td>
+            </tr>`
+            )
+            .join('')}
+        </tbody>
+      </table>
+    `;
+
+    body.querySelectorAll('[data-person-a]').forEach((btn) => {
+      btn.addEventListener('click', () => navigate('personDetail', { personId: Number(btn.dataset.personA) }));
+    });
+    body.querySelectorAll('[data-person-b]').forEach((btn) => {
+      btn.addEventListener('click', () => navigate('personDetail', { personId: Number(btn.dataset.personB) }));
+    });
+    body.querySelectorAll('[data-merge-candidate]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const c = candidates[Number(btn.dataset.mergeCandidate)];
+        openPersonLinkModal({
+          personAId: c.personAId,
+          personBId: c.personBId,
+          onResolved: refreshDuplicates,
+        });
+      });
     });
   }
 

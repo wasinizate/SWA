@@ -3,16 +3,25 @@
 // deliberately differ), with inline "add" and a link into the detail
 // view (which handles their notes, platform accounts, and orders).
 
-import { escapeHtml, formatDateTime, daysSince, formatDaysSince, PRIORITY_OPTIONS, priorityBadgeHtml } from '../helpers.js';
+import { escapeHtml, formatDateTime, formatMoney, daysSince, formatDaysSince, PRIORITY_OPTIONS, priorityBadgeHtml } from '../helpers.js';
 import { openModal } from '../modal.js';
 import { renderImportPanel } from '../importPanel.js';
+import { openPersonLinkModal } from '../personLinkModal.js';
 
-export function renderPeopleView(container, { navigate, quietOnly }) {
+export function renderPeopleView(container, { navigate, quietOnly, focusAddForm, linkingWithPersonId }) {
   container.innerHTML = `
     <div class="section-header">
       <h1>Clients</h1>
       <button type="button" class="btn-secondary" id="import-client-btn">Import client</button>
     </div>
+    ${
+      linkingWithPersonId
+        ? `<div class="linking-banner">
+            <span>Picking a client to link or merge with <strong id="linking-with-label">…</strong>. Click a name below to choose.</span>
+            <button type="button" class="btn-secondary btn-sm" id="cancel-linking">Cancel</button>
+          </div>`
+        : ''
+    }
     <form id="create-form" class="inline-form">
       <input type="text" id="private-label" placeholder="Private label (a nickname you'll recognize)" required />
       <button type="submit">Add client</button>
@@ -43,12 +52,13 @@ export function renderPeopleView(container, { navigate, quietOnly }) {
     </div>
 
     <table class="data-table">
-      <thead><tr><th>Label</th><th>Priority</th><th>Tags</th><th>Last order</th><th>Added</th><th></th></tr></thead>
-      <tbody id="rows"><tr><td colspan="6" class="loading-state">Loading…</td></tr></tbody>
+      <thead id="clients-thead"></thead>
+      <tbody id="rows"><tr><td colspan="7" class="loading-state">Loading…</td></tr></tbody>
     </table>
   `;
 
   const errorEl = container.querySelector('#error');
+  const theadEl = container.querySelector('#clients-thead');
   const rowsEl = container.querySelector('#rows');
   const filterSelect = container.querySelector('#filter-tag');
   const priorityFilterSelect = container.querySelector('#filter-priority');
@@ -58,19 +68,76 @@ export function renderPeopleView(container, { navigate, quietOnly }) {
   let allPeople = [];
   let tagsByPerson = {};
   let lastOrderByPerson = {};
+  let lifetimeSpendByPerson = {};
   let quietThresholdDays = 30;
 
+  // Sortable columns -- each a comparator plus which direction makes
+  // sense to start on. Money/dates default to descending (highest
+  // spend, most recent first -- what you'd actually want first look at,
+  // matching the "decide who deserves attention" framing the Client
+  // value card elsewhere uses); label/priority default ascending
+  // (alphabetical / low-to-high) since "descending" has no obviously
+  // more useful meaning for those. Tags has no single sortable value,
+  // so it's left out of this map entirely -- renderTableHead() below
+  // only makes a <th> clickable when a column has an entry here.
+  const SORT_COLUMNS = {
+    label: {
+      title: 'Label',
+      defaultDirection: 'asc',
+      compare: (a, b) => a.private_label.localeCompare(b.private_label),
+    },
+    priority: {
+      title: 'Priority',
+      defaultDirection: 'asc',
+      // PRIORITY_OPTIONS is itself already low -> normal -> vip, so its
+      // index doubles as an importance rank without a separate lookup.
+      compare: (a, b) =>
+        PRIORITY_OPTIONS.findIndex((o) => o.value === (a.priority || 'normal')) -
+        PRIORITY_OPTIONS.findIndex((o) => o.value === (b.priority || 'normal')),
+    },
+    spend: {
+      title: 'Lifetime spend',
+      defaultDirection: 'desc',
+      compare: (a, b) => (lifetimeSpendByPerson[a.id] || 0) - (lifetimeSpendByPerson[b.id] || 0),
+    },
+    lastOrder: {
+      title: 'Last order',
+      defaultDirection: 'desc',
+      // A client who's never ordered sorts as "oldest" (-Infinity), not
+      // first-on-ascending/last-on-descending by some arbitrary Date
+      // parse of undefined -- same "never ordered isn't quiet" reasoning
+      // isQuiet() below already applies to this same data.
+      compare: (a, b) => {
+        const aTime = lastOrderByPerson[a.id] ? new Date(lastOrderByPerson[a.id]).getTime() : -Infinity;
+        const bTime = lastOrderByPerson[b.id] ? new Date(lastOrderByPerson[b.id]).getTime() : -Infinity;
+        return aTime - bTime;
+      },
+    },
+    added: {
+      title: 'Added',
+      defaultDirection: 'desc',
+      compare: (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    },
+  };
+  let sortKey = 'label';
+  let sortDirection = SORT_COLUMNS.label.defaultDirection;
+
   async function refresh() {
-    const [people, groupedTags, allTags, lastOrderMap, thresholdDays] = await Promise.all([
+    const [people, groupedTags, allTags, lastOrderMap, lifetimeSpendMap, thresholdDays] = await Promise.all([
       window.api.person.listAll(),
       window.api.tag.listGroupedByPerson(),
       window.api.tag.listAll(),
       window.api.order.listLastOrderDateByPerson(),
+      window.api.order.listLifetimeSpendByPerson(),
       window.api.settings.getQuietClientThresholdDays(),
     ]);
-    allPeople = people;
+    // Excluded from the list entirely while linking -- picking yourself
+    // as the "other" client makes no sense, and person.js's own
+    // create()/mergeInto() guards would just reject it anyway.
+    allPeople = linkingWithPersonId ? people.filter((p) => p.id !== linkingWithPersonId) : people;
     tagsByPerson = groupedTags;
     lastOrderByPerson = lastOrderMap;
+    lifetimeSpendByPerson = lifetimeSpendMap;
     quietThresholdDays = thresholdDays ?? 30;
     thresholdInput.value = quietThresholdDays;
     renderTagFilterOptions(allTags);
@@ -106,7 +173,45 @@ export function renderPeopleView(container, { navigate, quietOnly }) {
     return days !== null && days >= quietThresholdDays;
   }
 
+  // Rebuilt on every render() call (sort state can change on any click),
+  // same "just regenerate the whole thing" approach the <tbody> below
+  // already uses -- cheap at this row/column count, and it keeps the
+  // header's sort-indicator arrow trivially in sync with sortKey/
+  // sortDirection without a separate DOM-patching path.
+  function renderTableHead() {
+    const cells = [
+      `<th data-sort="label">${sortIndicator('label')}Label</th>`,
+      `<th data-sort="priority">${sortIndicator('priority')}Priority</th>`,
+      `<th>Tags</th>`,
+      `<th data-sort="spend">${sortIndicator('spend')}Lifetime spend</th>`,
+      `<th data-sort="lastOrder">${sortIndicator('lastOrder')}Last order</th>`,
+      `<th data-sort="added">${sortIndicator('added')}Added</th>`,
+      `<th></th>`,
+    ];
+    theadEl.innerHTML = `<tr>${cells.join('')}</tr>`;
+
+    theadEl.querySelectorAll('th[data-sort]').forEach((th) => {
+      th.addEventListener('click', () => {
+        const key = th.dataset.sort;
+        if (sortKey === key) {
+          sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+          sortKey = key;
+          sortDirection = SORT_COLUMNS[key].defaultDirection;
+        }
+        render();
+      });
+    });
+  }
+
+  function sortIndicator(key) {
+    if (key !== sortKey) return '';
+    return sortDirection === 'asc' ? '▲ ' : '▼ ';
+  }
+
   function render() {
+    renderTableHead();
+
     let people = allPeople;
 
     if (filterSelect.value) {
@@ -120,8 +225,11 @@ export function renderPeopleView(container, { navigate, quietOnly }) {
       people = people.filter((p) => isQuiet(p.id));
     }
 
+    const { compare } = SORT_COLUMNS[sortKey];
+    people = [...people].sort((a, b) => (sortDirection === 'asc' ? compare(a, b) : -compare(a, b)));
+
     if (people.length === 0) {
-      rowsEl.innerHTML = `<tr><td colspan="6" class="muted">${
+      rowsEl.innerHTML = `<tr><td colspan="7" class="muted">${
         allPeople.length === 0 ? 'No clients yet.' : 'No clients match this filter.'
       }</td></tr>`;
       return;
@@ -141,6 +249,7 @@ export function renderPeopleView(container, { navigate, quietOnly }) {
               ? `<div class="tag-list">${tags.map((t) => `<span class="tag-chip">${escapeHtml(t.label)}</span>`).join('')}</div>`
               : ''
           }</td>
+          <td>${formatMoney(lifetimeSpendByPerson[p.id] || 0)}</td>
           <td class="${quiet ? 'quiet-client' : ''}">${formatDaysSince(days)}</td>
           <td>${formatDateTime(p.created_at)}</td>
           <td><button class="danger btn-sm" data-delete="${p.id}">Delete</button></td>
@@ -149,7 +258,17 @@ export function renderPeopleView(container, { navigate, quietOnly }) {
       .join('');
 
     rowsEl.querySelectorAll('[data-open]').forEach((btn) => {
-      btn.addEventListener('click', () => navigate('personDetail', { personId: Number(btn.dataset.open) }));
+      btn.addEventListener('click', () => {
+        if (linkingWithPersonId) {
+          openPersonLinkModal({
+            personAId: linkingWithPersonId,
+            personBId: Number(btn.dataset.open),
+            onResolved: (survivorId) => navigate('personDetail', { personId: survivorId || linkingWithPersonId }),
+          });
+          return;
+        }
+        navigate('personDetail', { personId: Number(btn.dataset.open) });
+      });
     });
     rowsEl.querySelectorAll('[data-delete]').forEach((btn) => {
       btn.addEventListener('click', async () => {
@@ -203,6 +322,18 @@ export function renderPeopleView(container, { navigate, quietOnly }) {
       errorEl.hidden = false;
     }
   });
+
+  // The "/new-client" slash command (see commands.js) lands here wanting
+  // the add-client field ready to type into immediately.
+  if (focusAddForm) container.querySelector('#private-label').focus();
+
+  if (linkingWithPersonId) {
+    container.querySelector('#cancel-linking').addEventListener('click', () => navigate('personDetail', { personId: linkingWithPersonId }));
+    window.api.person.get(linkingWithPersonId).then((origin) => {
+      const label = container.querySelector('#linking-with-label');
+      if (label && origin) label.textContent = origin.private_label;
+    });
+  }
 
   refresh();
 }

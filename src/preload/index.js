@@ -43,12 +43,16 @@ contextBridge.exposeInMainWorld('api', {
     create: (data) => ipcRenderer.invoke('person:create', data),
     update: (id, data) => ipcRenderer.invoke('person:update', id, data),
     delete: (id) => ipcRenderer.invoke('person:delete', id),
+    mergeInto: (loserId, survivorId) => ipcRenderer.invoke('person:mergeInto', loserId, survivorId),
+    findDuplicateCandidates: () => ipcRenderer.invoke('person:findDuplicateCandidates'),
   },
   platformAccount: {
     listByPerson: (personId) => ipcRenderer.invoke('platformAccount:listByPerson', personId),
     create: (data) => ipcRenderer.invoke('platformAccount:create', data),
     update: (id, data) => ipcRenderer.invoke('platformAccount:update', id, data),
     delete: (id) => ipcRenderer.invoke('platformAccount:delete', id),
+    findByPlatformAndUsername: (platformName, username, options) =>
+      ipcRenderer.invoke('platformAccount:findByPlatformAndUsername', platformName, username, options),
   },
   tag: {
     listAll: () => ipcRenderer.invoke('tag:listAll'),
@@ -74,10 +78,13 @@ contextBridge.exposeInMainWorld('api', {
     update: (id, data) => ipcRenderer.invoke('order:update', id, data),
     delete: (id) => ipcRenderer.invoke('order:delete', id),
     getTotalsByPerson: (personId) => ipcRenderer.invoke('order:getTotalsByPerson', personId),
+    getClientValueSummary: (personId) => ipcRenderer.invoke('order:getClientValueSummary', personId),
+    getRevenueByPlatformForPerson: (personId) => ipcRenderer.invoke('order:getRevenueByPlatformForPerson', personId),
     listWithDeliveryDueDates: () => ipcRenderer.invoke('order:listWithDeliveryDueDates'),
     getDueDateSummary: () => ipcRenderer.invoke('order:getDueDateSummary'),
     getOpenOrderCount: () => ipcRenderer.invoke('order:getOpenOrderCount'),
     listLastOrderDateByPerson: () => ipcRenderer.invoke('order:listLastOrderDateByPerson'),
+    listLifetimeSpendByPerson: () => ipcRenderer.invoke('order:listLifetimeSpendByPerson'),
     exportPdf: (id) => ipcRenderer.invoke('order:exportPdf', id),
     getSlatedIncomeTotals: () => ipcRenderer.invoke('order:getSlatedIncomeTotals'),
     getTotalsAll: () => ipcRenderer.invoke('order:getTotalsAll'),
@@ -120,9 +127,27 @@ contextBridge.exposeInMainWorld('api', {
     setPricePaid: (orderId, contentItemId, priceCents) =>
       ipcRenderer.invoke('contentItem:setPricePaid', orderId, contentItemId, priceCents),
     findByTitle: (title) => ipcRenderer.invoke('contentItem:findByTitle', title),
+    listMatchingPersonInterests: (personId) => ipcRenderer.invoke('contentItem:listMatchingPersonInterests', personId),
     getSalesDetail: (contentItemId) => ipcRenderer.invoke('contentItem:getSalesDetail', contentItemId),
     listFiles: (contentItemId) => ipcRenderer.invoke('contentItem:listFiles', contentItemId),
     setFilePrices: (contentItemId, updates) => ipcRenderer.invoke('contentItem:setFilePrices', contentItemId, updates),
+  },
+  incomeImport: {
+    parsePdf: (data) => ipcRenderer.invoke('incomeImport:parsePdf', data),
+    parseCsv: (text) => ipcRenderer.invoke('incomeImport:parseCsv', text),
+  },
+  personLink: {
+    listForPerson: (personId) => ipcRenderer.invoke('personLink:listForPerson', personId),
+    create: (personAId, personBId, note) => ipcRenderer.invoke('personLink:create', personAId, personBId, note),
+    remove: (id) => ipcRenderer.invoke('personLink:remove', id),
+  },
+  personInteraction: {
+    listForPerson: (personId) => ipcRenderer.invoke('personInteraction:listForPerson', personId),
+    create: (personId, data) => ipcRenderer.invoke('personInteraction:create', personId, data),
+    remove: (id) => ipcRenderer.invoke('personInteraction:remove', id),
+    resolveFollowUp: (id) => ipcRenderer.invoke('personInteraction:resolveFollowUp', id),
+    getFollowUpSummary: () => ipcRenderer.invoke('personInteraction:getFollowUpSummary'),
+    getOpenFollowUpCount: () => ipcRenderer.invoke('personInteraction:getOpenFollowUpCount'),
   },
   contentScan: {
     getRootPath: () => ipcRenderer.invoke('contentScan:getRootPath'),
@@ -176,6 +201,8 @@ contextBridge.exposeInMainWorld('api', {
     setTheme: (theme) => ipcRenderer.invoke('settings:setTheme', theme),
     getDashboardNote: () => ipcRenderer.invoke('settings:getDashboardNote'),
     setDashboardNote: (note) => ipcRenderer.invoke('settings:setDashboardNote', note),
+    recordPersonView: (personId) => ipcRenderer.invoke('settings:recordPersonView', personId),
+    getRecentlyViewedPersons: () => ipcRenderer.invoke('settings:getRecentlyViewedPersons'),
     getQuietClientThresholdDays: () => ipcRenderer.invoke('settings:getQuietClientThresholdDays'),
     setQuietClientThresholdDays: (days) => ipcRenderer.invoke('settings:setQuietClientThresholdDays', days),
     // Master network-access lock (see src/main/security/networkGuard.js)

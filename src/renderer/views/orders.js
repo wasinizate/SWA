@@ -3,10 +3,11 @@
 // Click an order's "#" to open its own page (see orderDetail.js) for full
 // editing, or a client's name to jump to their profile instead.
 
-import { escapeHtml, formatMoney, previewText, ORDER_STATUSES, buildStatusOptions, loadingHtml } from '../helpers.js';
+import { escapeHtml, formatMoney, previewText, ORDER_STATUSES, buildStatusOptions, loadingHtml, needsPaymentDateBeforeClosing } from '../helpers.js';
 import { showToast } from '../toast.js';
 import { openModal } from '../modal.js';
 import { renderImportPanel } from '../importPanel.js';
+import { openCloseOrderModal } from '../closeOrderModal.js';
 
 export function renderOrdersView(container, { navigate }) {
   container.innerHTML = `
@@ -139,7 +140,21 @@ export function renderOrdersView(container, { navigate }) {
       const order = orders.find((o) => o.id === Number(select.dataset.quickStatus));
       select.value = order.status;
       select.addEventListener('change', async () => {
-        await window.api.order.update(order.id, { status: select.value });
+        const newStatus = select.value;
+
+        if (needsPaymentDateBeforeClosing(order, newStatus)) {
+          select.value = order.status; // only re-applied if the close-out modal is actually submitted
+          openCloseOrderModal({
+            order,
+            onClose: async (datePaid) => {
+              await window.api.order.update(order.id, { status: 'completed', datePaid });
+              await load();
+            },
+          });
+          return;
+        }
+
+        await window.api.order.update(order.id, { status: newStatus });
         await load();
       });
     });

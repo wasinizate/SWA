@@ -56,6 +56,16 @@ function registerSettingsIpc() {
     return note;
   });
 
+  ipcMain.handle('settings:recordPersonView', (_event, personId) => {
+    if (!connection.isOpen()) return;
+    settingsRepo.recordPersonView(personId);
+  });
+
+  ipcMain.handle('settings:getRecentlyViewedPersons', () => {
+    if (!connection.isOpen()) return [];
+    return settingsRepo.getRecentlyViewedPersons();
+  });
+
   ipcMain.handle('settings:getQuietClientThresholdDays', () => {
     if (!connection.isOpen()) return null;
     return settingsRepo.getQuietClientThresholdDays();

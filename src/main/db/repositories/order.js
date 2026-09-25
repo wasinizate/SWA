@@ -197,6 +197,64 @@ function getTotalsByPerson(personId) {
   return { allTimeCents, byYear, byMonth };
 }
 
+// A compact "how much attention does this client deserve right now"
+// snapshot for the top of their own page -- lifetime spend, two rolling
+// windows, order count, average order value, and last purchase date, in
+// two queries rather than the renderer stitching several calls
+// together. Same CONFIRMED_SALE_WHERE-shaped condition as
+// getTotalsByPerson() above (a real payment date, not cancelled). The
+// rolling windows use SQLite's own date('now', 'localtime', '-N days'),
+// same pattern getDueDateSummary() already uses for delivery due dates,
+// applied here to date_paid instead.
+function getClientValueSummary(personId) {
+  const db = getDb();
+  const where = `person_id = ? AND date_paid IS NOT NULL AND status != 'cancelled'`;
+
+  const overall = db
+    .prepare(
+      `SELECT COUNT(*) AS order_count, COALESCE(SUM(amount_cents), 0) AS lifetime_cents, MAX(date_paid) AS last_purchase_date
+       FROM orders WHERE ${where}`
+    )
+    .get(personId);
+
+  const windowCents = (days) =>
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(amount_cents), 0) AS total_cents
+         FROM orders WHERE ${where} AND date_paid >= date('now', 'localtime', '-' || ? || ' days')`
+      )
+      .get(personId, days).total_cents;
+
+  return {
+    orderCount: overall.order_count,
+    lifetimeCents: overall.lifetime_cents,
+    lastPurchaseDate: overall.last_purchase_date,
+    averageOrderCents: overall.order_count > 0 ? Math.round(overall.lifetime_cents / overall.order_count) : 0,
+    last30Cents: windowCents(30),
+    last90Cents: windowCents(90),
+  };
+}
+
+// This client's spend broken down by platform, for the current calendar
+// year only -- personDetail.js's header snapshot bar. Same join and
+// exclusion rule as analytics.js's own getRevenueByPlatform() (which is
+// app-wide, not per-client), scoped down to one person_id and the
+// current year via strftime('%Y', ...) rather than a rolling window.
+function getRevenueByPlatformForPerson(personId) {
+  return getDb()
+    .prepare(
+      `SELECT platform_accounts.platform_name,
+              COALESCE(SUM(orders.amount_cents), 0) AS total_cents
+       FROM orders
+       JOIN platform_accounts ON platform_accounts.id = orders.platform_account_id
+       WHERE orders.person_id = ? AND orders.date_paid IS NOT NULL AND orders.status != 'cancelled'
+         AND strftime('%Y', orders.date_paid) = strftime('%Y', 'now', 'localtime')
+       GROUP BY platform_accounts.platform_name
+       ORDER BY total_cents DESC`
+    )
+    .all(personId);
+}
+
 // Money expected but not yet confirmed -- orders that haven't been paid
 // yet and aren't cancelled. A companion to getTotalsByPerson()/
 // getTotalsAll() (which only count confirmed, date_paid money) for the
@@ -245,6 +303,26 @@ function listLastOrderDateByPerson() {
   const rows = getDb().prepare('SELECT person_id, MAX(created_at) AS last_order_at FROM orders GROUP BY person_id').all();
   const map = {};
   for (const row of rows) map[row.person_id] = row.last_order_at;
+  return map;
+}
+
+// Lifetime confirmed spend per person, for the Clients list -- lets
+// "who's worth my attention right now" be answerable while scanning the
+// whole list, not just after opening someone's own page (see
+// getClientValueSummary() above for the fuller per-client breakdown
+// that page shows). Same one-query-grouped-in-JS shape as
+// listLastOrderDateByPerson(); a person with no confirmed orders simply
+// has no key here rather than a $0 entry.
+function listLifetimeSpendByPerson() {
+  const rows = getDb()
+    .prepare(
+      `SELECT person_id, SUM(amount_cents) AS total_cents
+       FROM orders WHERE date_paid IS NOT NULL AND status != 'cancelled'
+       GROUP BY person_id`
+    )
+    .all();
+  const map = {};
+  for (const row of rows) map[row.person_id] = row.total_cents;
   return map;
 }
 
@@ -321,11 +399,14 @@ module.exports = {
   update,
   remove,
   getTotalsByPerson,
+  getClientValueSummary,
+  getRevenueByPlatformForPerson,
   listWithDeliveryDueDates,
   markDueReminderNotified,
   getDueDateSummary,
   getOpenOrderCount,
   listLastOrderDateByPerson,
+  listLifetimeSpendByPerson,
   getSlatedIncomeTotals,
   getTotalsAll,
   getByExternalId,

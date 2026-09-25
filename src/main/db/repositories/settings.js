@@ -12,6 +12,7 @@ const DEFAULT_ORDER_DUE_REMINDER_DAYS_BEFORE = 1;
 const DEFAULT_SHOW_DUE_SUMMARY_ON_OPEN = true;
 const DEFAULT_THEME = 'default';
 const DEFAULT_QUIET_CLIENT_THRESHOLD_DAYS = 30;
+const RECENTLY_VIEWED_LIMIT = 8;
 
 // Small internal helpers shared by every setting below -- app_settings is
 // a plain key/value table (see 0001_init.sql), so every getter/setter
@@ -82,6 +83,38 @@ function getDashboardNote() {
 
 function setDashboardNote(note) {
   setSetting('dashboard_note', note);
+}
+
+// Recently viewed clients, for the sidebar's "Recently viewed" list --
+// stored as a JSON array of ids, most-recent-first, same key/value
+// table as everything else here rather than a dedicated table for
+// something this small. Capped at RECENTLY_VIEWED_LIMIT on every write,
+// not just on read, so the stored value itself never grows unbounded.
+function getRecentlyViewedPersonIds() {
+  try {
+    const ids = JSON.parse(getSetting('recently_viewed_person_ids', '[]'));
+    return Array.isArray(ids) ? ids : [];
+  } catch (err) {
+    return []; // corrupted/hand-edited value -- fail soft, not a crash
+  }
+}
+
+function recordPersonView(personId) {
+  const withoutThisOne = getRecentlyViewedPersonIds().filter((id) => id !== personId);
+  const updated = [personId, ...withoutThisOne].slice(0, RECENTLY_VIEWED_LIMIT);
+  setSetting('recently_viewed_person_ids', JSON.stringify(updated));
+}
+
+// Resolves stored ids to { id, private_label } pairs, most-recent-first,
+// silently dropping any id that no longer resolves to a real person
+// (deleted, or merged away as the losing side of person.js's
+// mergeInto()) -- simpler and more robust than trying to proactively
+// scrub this list from every place a person can disappear.
+function getRecentlyViewedPersons() {
+  const db = getDb();
+  return getRecentlyViewedPersonIds()
+    .map((id) => db.prepare('SELECT id, private_label FROM persons WHERE id = ?').get(id))
+    .filter(Boolean);
 }
 
 // How many days without a new order before the Clients list/Dashboard
@@ -184,6 +217,8 @@ module.exports = {
   setTheme,
   getDashboardNote,
   setDashboardNote,
+  recordPersonView,
+  getRecentlyViewedPersons,
   getQuietClientThresholdDays,
   setQuietClientThresholdDays,
   getSyncInstanceId,

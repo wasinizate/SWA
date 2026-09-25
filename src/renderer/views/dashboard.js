@@ -37,17 +37,19 @@ export function renderDashboardView(container, { navigate }) {
   init();
 
   async function init() {
-    const [people, openOrderCount, dueSummary, totalsAll, slated, note, lastOrderByPerson, quietThresholdDays, syncStatus] = await Promise.all([
-      window.api.person.listAll(),
-      window.api.order.getOpenOrderCount(),
-      window.api.order.getDueDateSummary(),
-      window.api.order.getTotalsAll(),
-      window.api.order.getSlatedIncomeTotals(),
-      window.api.settings.getDashboardNote(),
-      window.api.order.listLastOrderDateByPerson(),
-      window.api.settings.getQuietClientThresholdDays(),
-      window.api.sync.getStatus(),
-    ]);
+    const [people, openOrderCount, dueSummary, totalsAll, slated, note, lastOrderByPerson, quietThresholdDays, syncStatus, openFollowUpCount] =
+      await Promise.all([
+        window.api.person.listAll(),
+        window.api.order.getOpenOrderCount(),
+        window.api.order.getDueDateSummary(),
+        window.api.order.getTotalsAll(),
+        window.api.order.getSlatedIncomeTotals(),
+        window.api.settings.getDashboardNote(),
+        window.api.order.listLastOrderDateByPerson(),
+        window.api.settings.getQuietClientThresholdDays(),
+        window.api.sync.getStatus(),
+        window.api.personInteraction.getOpenFollowUpCount(),
+      ]);
 
     // A client with zero orders was never really "heard from" to begin
     // with, so only someone present in lastOrderByPerson (has ordered at
@@ -58,12 +60,20 @@ export function renderDashboardView(container, { navigate }) {
       return days !== null && days >= (quietThresholdDays ?? 30);
     }).length;
 
-    renderStats({ clientCount: people.length, openOrderCount, totalsAll, slated, quietClientCount, pendingSyncCount: syncStatus.pendingCount });
+    renderStats({
+      clientCount: people.length,
+      openOrderCount,
+      totalsAll,
+      slated,
+      quietClientCount,
+      pendingSyncCount: syncStatus.pendingCount,
+      openFollowUpCount,
+    });
     renderDue(dueSummary);
     container.querySelector('#dashboard-note').value = note ?? '';
   }
 
-  function renderStats({ clientCount, openOrderCount, totalsAll, slated, quietClientCount, pendingSyncCount }) {
+  function renderStats({ clientCount, openOrderCount, totalsAll, slated, quietClientCount, pendingSyncCount, openFollowUpCount }) {
     // 'YYYY-MM' in UTC, matching the strftime('%Y-%m', date_paid) grouping
     // getTotalsAll() uses server-side (no 'localtime' modifier there) --
     // using the browser's local month here would occasionally disagree
@@ -95,6 +105,10 @@ export function renderDashboardView(container, { navigate }) {
         <div class="income-stat-label">Quiet clients</div>
         <div class="income-stat-value">${quietClientCount}</div>
       </button>
+      <button type="button" class="income-stat stat-clickable" id="stat-follow-ups">
+        <div class="income-stat-label">Follow-ups due</div>
+        <div class="income-stat-value">${openFollowUpCount}</div>
+      </button>
       <button type="button" class="income-stat stat-clickable" id="stat-pending-sync">
         <div class="income-stat-label">Pending sync updates</div>
         <div class="income-stat-value">${pendingSyncCount}</div>
@@ -111,6 +125,7 @@ export function renderDashboardView(container, { navigate }) {
     statsEl.querySelector('#stat-month-income').addEventListener('click', () => navigate('expenses'));
     statsEl.querySelector('#stat-slated').addEventListener('click', () => navigate('expenses'));
     statsEl.querySelector('#stat-quiet-clients').addEventListener('click', () => navigate('people', { quietOnly: true }));
+    statsEl.querySelector('#stat-follow-ups').addEventListener('click', () => navigate('followUps'));
     statsEl.querySelector('#stat-pending-sync').addEventListener('click', () => navigate('settings'));
   }
 

@@ -78,7 +78,7 @@ function toDateKey(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-export function renderCalendarView(container, { navigate, focusOrderId }) {
+export function renderCalendarView(container, { navigate, focusOrderId, openNewEventToday }) {
   // FullCalendar's built-in dark palette is only appropriate for this
   // app's dark themes -- Sakura is light, so let FullCalendar fall back
   // to its own light default there instead of forcing dark-on-light.
@@ -593,5 +593,14 @@ export function renderCalendarView(container, { navigate, focusOrderId }) {
 
     initCalendar(initialEvents, targetDateStr);
     if (targetDateStr) calendar.gotoDate(targetDateStr);
+
+    // The "/add-event" slash command (see commands.js) lands here and
+    // wants the new-event form already open on today's date, same
+    // default (9am, timed not all-day) as clicking today's day cell.
+    if (openNewEventToday) {
+      const start = new Date();
+      start.setHours(9, 0, 0, 0);
+      openEventModal({ startDatetime: start.toISOString(), allDay: false });
+    }
   })();
 }

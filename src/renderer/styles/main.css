@@ -33,6 +33,17 @@
      photo-viewer or dialog in any app. */
   --backdrop: rgba(0, 0, 0, 0.6);
   --backdrop-heavy: rgba(0, 0, 0, 0.85);
+  /* Hash-colored chips (personDetail.js's platform badges/revenue chips/
+     preference tags -- see .chip-color) set only --hue per chip; how
+     saturated/light that hue renders is a theme concern like everything
+     else here. Dark themes share this; Sakura (the one light theme)
+     overrides it below, same split as --shadow above. */
+  --chip-bg-sat: 42%;
+  --chip-bg-light: 20%;
+  --chip-fg-sat: 65%;
+  --chip-fg-light: 76%;
+  --chip-border-sat: 38%;
+  --chip-border-light: 34%;
 }
 
 /* OnlyFans: built from their actual published brand colors, not an
@@ -93,6 +104,12 @@
      harsh rgba(0,0,0,.45) overlay reads out of place next to this
      theme's otherwise soft, light palette. */
   --shadow: rgba(120, 60, 90, 0.18);
+  --chip-bg-sat: 65%;
+  --chip-bg-light: 91%;
+  --chip-fg-sat: 50%;
+  --chip-fg-light: 34%;
+  --chip-border-sat: 45%;
+  --chip-border-light: 78%;
 }
 
 * {
@@ -538,6 +555,17 @@ hr {
   background: var(--surface-alt);
 }
 
+/* people.js's sortable column headers -- th[data-sort] rather than a
+   new class, since only some columns are sortable (see SORT_COLUMNS)
+   and this reads directly off that same marker. */
+.data-table th[data-sort] {
+  cursor: pointer;
+  user-select: none;
+}
+.data-table th[data-sort]:hover {
+  color: var(--text);
+}
+
 .shell {
   display: flex;
   min-height: 100vh;
@@ -634,6 +662,21 @@ hr {
   background: var(--surface-alt);
 }
 
+/* shell.js's "/" command palette rows -- name on its own line (so the
+   monospace-ish "/name" reads clearly) with the description wrapping
+   normally underneath, unlike the single-line ellipsis truncation every
+   other sidebar-search-result uses. */
+.sidebar-command-result {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+.sidebar-command-name {
+  display: block;
+  font-family: monospace;
+  font-weight: 600;
+}
+
 .sidebar-search-see-all {
   border-top: 1px solid var(--border);
   margin-top: 0.3rem;
@@ -675,6 +718,41 @@ hr {
 .lock-button {
   background: var(--surface-alt);
   border: 1px solid var(--border);
+}
+
+/* shell.js's "Recently viewed" strip -- sits between the main nav and
+   the lock button, empty (no title, no height) when there's nothing to
+   show yet rather than an empty section header. */
+.sidebar-recent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin-bottom: 0.6rem;
+}
+.sidebar-recent-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  padding: 0.3rem 0.7rem 0.15rem;
+}
+.sidebar-recent-link {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 0.3rem 0.7rem;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.sidebar-recent-link:hover {
+  background: var(--surface-alt);
+  color: var(--text);
 }
 
 .lock-button:hover {
@@ -869,6 +947,362 @@ hr {
 
 .income-stat-net .income-stat-value {
   color: var(--accent);
+}
+
+/* personDetail.js's ID card -- a compact identity/stats summary at the
+   top of a client's page (name, platforms, revenue, flags, preference
+   tags), with the fuller Notes/Activity/Platform accounts/Orders detail
+   living in the collapsible .detail sections below it instead of a long
+   stack of always-expanded cards. See personDetail.js's render() for the
+   markup this styles. */
+.id-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.25rem 1.4rem 1.4rem;
+}
+
+.id-top {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.id-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.15rem;
+  flex-shrink: 0;
+}
+
+.id-name-block {
+  min-width: 0;
+  flex: 1;
+}
+
+.id-name {
+  font-size: 1.3rem;
+  font-weight: 700;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.id-platforms {
+  margin-top: 0.4rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+/* Shared by platform badges, revenue chips, and preference tags -- a
+   chip's --hue custom property is set inline by JS (see helpers.js's
+   hashHue()), so the same platform name lands on the same color
+   everywhere it appears on the card, and every tag reads as its own
+   distinct color instead of one uniform muted pill. Saturation/lightness
+   stay theme tokens, not hardcoded, so a hash-colored chip stays legible
+   across all 4 themes the same way every other color in this file does. */
+.chip-color {
+  background: hsl(var(--hue) var(--chip-bg-sat) var(--chip-bg-light));
+  color: hsl(var(--hue) var(--chip-fg-sat) var(--chip-fg-light));
+  border: 1px solid hsl(var(--hue) var(--chip-border-sat) var(--chip-border-light));
+}
+
+.platform-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.16rem 0.55rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+/* Priority badge (VIP etc.) reuses .priority-badge as-is; this is just
+   the second flag this app didn't have a chip for yet. */
+.flag-followup {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.18rem 0.5rem;
+  border-radius: 999px;
+  /* Same color-mix tint technique as .priority-vip/.priority-low above --
+     no separate "-soft" token needed, works across all 4 themes. */
+  background: color-mix(in srgb, var(--danger) 20%, transparent);
+  color: var(--danger);
+}
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 1.1rem;
+}
+
+.stat {
+  background: var(--surface-alt);
+  padding: 0.6rem 0.7rem;
+}
+
+.stat-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.stat-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-top: 0.15rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-value.danger {
+  color: var(--danger);
+}
+
+.section-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin: 1rem 0 0.4rem;
+}
+
+.platform-revenue {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.prev-chip {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  border-radius: 999px;
+  padding: 0.25rem 0.65rem 0.25rem 0.55rem;
+  font-size: 0.8rem;
+}
+
+.prev-chip .amt {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Client-page preference tags -- hover reveals a remove x, double-click
+   (or focus + Enter, for keyboard use) swaps the label for an inline
+   rename input. No on-screen instructions for this -- the hover/
+   double-click affordances are meant to read as obvious on sight, same
+   as .tag-chip-remove's x elsewhere in this app. This is a *local* edit
+   -- it changes this client's tags only (remove old association +
+   add/reuse the new label, see personDetail.js) -- unlike Settings' tag
+   rename, which renames a tag everywhere it's used; deliberately not the
+   same action. */
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.tag-row-spaced {
+  margin-top: 1rem;
+}
+
+.pref-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  padding: 0.22rem 0.3rem 0.22rem 0.55rem;
+  font-size: 0.78rem;
+}
+
+.pref-chip .chip-label {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.pref-chip .chip-remove {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0.1rem;
+  margin-left: 0.2rem;
+  border-radius: 4px;
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+  transition: opacity 0.12s ease, width 0.12s ease;
+}
+
+.pref-chip:hover .chip-remove,
+.pref-chip:focus-within .chip-remove {
+  opacity: 0.75;
+  width: 1rem;
+}
+
+.pref-chip .chip-remove:hover {
+  opacity: 1;
+}
+
+.pref-chip .chip-edit-input {
+  background: var(--surface);
+  border: none;
+  color: var(--text);
+  font: inherit;
+  width: 6.5em;
+  outline: none;
+}
+
+.chip-add {
+  display: inline-flex;
+  align-items: center;
+  background: transparent;
+  border: 1px dashed var(--border);
+  color: var(--text-muted);
+  border-radius: 6px;
+  padding: 0.22rem 0.55rem;
+  font-size: 0.78rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.chip-add:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.id-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1.1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+/* The quick-follow-up form is meant to read as one compact row, not
+   wrap into its own paragraph -- .inline-form's shared default (used by
+   every other form in this app, most of which legitimately need to wrap
+   on a narrow window) grows its note input to fill available space and
+   wraps the Flag button under it. Overridden here by id, not by editing
+   .inline-form itself. */
+#quick-follow-up-form {
+  flex-wrap: nowrap;
+}
+
+#quick-follow-up-form select,
+#quick-follow-up-form input {
+  flex: 0 0 auto;
+}
+
+#quick-follow-up-note {
+  width: 11rem;
+}
+
+/* Divider between the ID card and the collapsible detail sections below
+   it -- signals "there's more, scroll" without another full card. */
+.scroll-cue {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 1.6rem 0 1.1rem;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.scroll-cue::before,
+.scroll-cue::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* Collapsible detail sections (Orders, Activity, Notes, Platform
+   accounts, Priority & sharing, Linked clients, Content matches) --
+   <details>/<summary> natively, so open/closed needs no JS of its own
+   and works with keyboard/screen readers for free. */
+.detail {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 0.7rem;
+  overflow: hidden;
+}
+
+.detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1.1rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.detail-head::-webkit-details-marker {
+  display: none;
+}
+
+.detail-head h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.detail-chevron {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  transition: transform 0.15s ease;
+}
+
+.detail[open] .detail-chevron {
+  transform: rotate(90deg);
+}
+
+.detail-body {
+  padding: 0 1.1rem 1.1rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.9rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .detail-chevron,
+  .pref-chip .chip-remove {
+    transition: none;
+  }
 }
 
 /* Dashboard's stat cards (dashboard.js) reuse .income-stat above but are
@@ -1201,6 +1635,79 @@ hr {
   border-bottom: none;
 }
 
+/* followUps.js's queue rows -- text/badges on the left, the "Mark done"
+   action pinned to the right regardless of how many lines the note
+   text wraps to. */
+.followup-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+/* A small, unlabeled icon-only button -- personDetail.js's 🔗 "link or
+   merge with another client" button next to the client's name. Sized to
+   sit inline with a heading rather than looking like a full button. */
+.icon-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.15rem 0.3rem;
+  border-radius: 6px;
+  vertical-align: middle;
+}
+.icon-button:hover {
+  background: var(--surface-alt);
+}
+
+/* incomeStatementImport.js's CSV column-mapping form -- one label+select
+   per target field, wrapping naturally at narrower widths. */
+.csv-mapping-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+/* incomeStatementImport.js's PDF-import raw-text panel -- a monospace,
+   scrollable block so a long statement doesn't blow out the modal's
+   height, while still being fully readable for double-checking a guess. */
+.pdf-extracted-text {
+  max-height: 240px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  font-size: 0.8rem;
+  background: var(--surface-alt);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.8rem;
+}
+
+/* personLinkModal.js's "which one survives" merge choice -- two
+   equally-sized options side by side rather than implying either is the
+   default. */
+.merge-choice-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+/* personDetail.js's Activity timeline -- same left-text/right-actions
+   shape as .followup-row above, one row per logged entry. */
+.interaction-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.interaction-row:last-child {
+  border-bottom: none;
+}
+
 /* FullCalendar (see calendar.js) ships its own CSS at runtime and reads
    these standard custom properties for theming -- overridden here so it
    blends with the app's dark palette instead of its light default. */
@@ -1302,6 +1809,22 @@ hr {
    in this file yet. */
 .folder-missing-banner {
   border-left: 3px solid var(--danger);
+  background: var(--surface-alt);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+/* people.js's "picking a client to link with X" mode -- same banner
+   treatment as .folder-missing-banner above, accent instead of danger
+   since this is a deliberate in-progress action, not a problem. */
+.linking-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-left: 3px solid var(--accent);
   background: var(--surface-alt);
   border-radius: var(--radius);
   padding: 0.6rem 0.9rem;

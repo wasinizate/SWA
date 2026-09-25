@@ -14,6 +14,7 @@
 
 const crypto = require('crypto');
 const { getDb } = require('../connection');
+const personLinkRepo = require('./personLink');
 
 function listAll() {
   return getDb().prepare('SELECT * FROM persons ORDER BY private_label COLLATE NOCASE').all();
@@ -95,4 +96,131 @@ function setExternalId(id, externalId) {
   getDb().prepare('UPDATE persons SET external_id = ? WHERE id = ?').run(externalId, id);
 }
 
-module.exports = { listAll, get, create, update, remove, listShared, getByExternalId, ensureExternalId, setExternalId };
+// Merges `loserId` into `survivorId`: every order, platform account,
+// tag, and Activity log entry loserId owns is repointed to survivorId,
+// then loserId is deleted -- for fixing a genuine duplicate client found
+// via personDuplicates.js's findDuplicateCandidates() (or noticed by
+// hand). Never automatic -- always a human-confirmed action, since
+// merging the wrong two people is a much worse outcome than leaving an
+// actual duplicate alone.
+//
+// Wrapped in one transaction: either the whole merge happens or none of
+// it does, so a mid-merge failure can't leave orders repointed to
+// survivorId while loserId still exists as an orphaned near-duplicate.
+function mergeInto(loserId, survivorId) {
+  if (loserId === survivorId) throw new Error('Cannot merge a client into themself.');
+  const loser = get(loserId);
+  const survivor = get(survivorId);
+  if (!loser) throw new Error(`Client ${loserId} not found.`);
+  if (!survivor) throw new Error(`Client ${survivorId} not found.`);
+
+  const db = getDb();
+  const run = db.transaction(() => {
+    // Orders move over by reassigning person_id -- their own id is
+    // unchanged, so everything keyed off *order_id* (attachments,
+    // linked content items, a calendar event's linked_order_id) still
+    // points at the right row with no change needed there at all.
+    db.prepare('UPDATE orders SET person_id = ? WHERE person_id = ?').run(survivorId, loserId);
+
+    // Platform accounts: skip any that would exactly duplicate one the
+    // survivor already has (case-insensitive platform+username) --
+    // that's very likely *why* this merge is happening in the first
+    // place (see personDuplicates.js's "exact_account" tier). Skipped
+    // rows simply vanish with loserId's own row at the end (ON DELETE
+    // CASCADE), nothing left to clean up separately.
+    const survivorAccounts = db.prepare('SELECT platform_name, username FROM platform_accounts WHERE person_id = ?').all(survivorId);
+    const isDuplicateAccount = (a) =>
+      survivorAccounts.some(
+        (s) => s.platform_name.toLowerCase() === a.platform_name.toLowerCase() && s.username.toLowerCase() === a.username.toLowerCase()
+      );
+    const loserAccounts = db.prepare('SELECT id, platform_name, username FROM platform_accounts WHERE person_id = ?').all(loserId);
+    const moveAccount = db.prepare('UPDATE platform_accounts SET person_id = ? WHERE id = ?');
+    for (const account of loserAccounts) {
+      if (!isDuplicateAccount(account)) moveAccount.run(survivorId, account.id);
+    }
+
+    // Tags: INSERT OR IGNORE handles person_tags' (person_id, tag_id)
+    // PRIMARY KEY -- a tag the survivor already has is silently skipped
+    // rather than erroring, same "adopt without duplicating" reasoning
+    // as the platform accounts above. Old rows still pointing at
+    // loserId are cleaned up by ON DELETE CASCADE when loserId is
+    // deleted below.
+    db.prepare('INSERT OR IGNORE INTO person_tags (person_id, tag_id) SELECT ?, tag_id FROM person_tags WHERE person_id = ?').run(
+      survivorId,
+      loserId
+    );
+
+    // Activity log entries move over as-is -- an append-only timeline,
+    // not a set, so there's no "duplicate" concept to dedupe here (see
+    // 0018_person_interactions.sql).
+    db.prepare('UPDATE person_interactions SET person_id = ? WHERE person_id = ?').run(survivorId, loserId);
+
+    // Person links (see 0019_person_links.sql): a link naming loserId
+    // moves to survivorId, so "this client is connected to a third
+    // person" doesn't just vanish because loserId got merged away. A
+    // link *between* loserId and survivorId themselves is meaningless
+    // after the merge (they're the same record now) and is simply
+    // dropped -- along with every other now-stale row naming loserId --
+    // by ON DELETE CASCADE when loserId is deleted below. INSERT OR
+    // IGNORE against the UNIQUE(person_a_id, person_b_id) constraint
+    // handles the case where survivor was already independently linked
+    // to that same third person.
+    const loserLinks = db.prepare('SELECT * FROM person_links WHERE person_a_id = ? OR person_b_id = ?').all(loserId, loserId);
+    const insertLink = db.prepare('INSERT OR IGNORE INTO person_links (person_a_id, person_b_id, note) VALUES (?, ?, ?)');
+    for (const link of loserLinks) {
+      const otherPersonId = link.person_a_id === loserId ? link.person_b_id : link.person_a_id;
+      if (otherPersonId === survivorId) continue;
+      const [a, b] = personLinkRepo.orderPair(otherPersonId, survivorId);
+      insertLink.run(a, b, link.note);
+    }
+
+    // Cross-instance identity (see 0008_data_export.sql/applyImport.js):
+    // if loserId was ever itself synced/exported, its external_id needs
+    // to keep resolving to *something* afterward, or a future sync from
+    // that same remote source would recreate the very duplicate this
+    // merge just fixed. Any existing aliases already pointing at
+    // loserId move to survivorId directly -- no collision risk,
+    // person_external_links.person_id isn't unique, only its
+    // external_id column is.
+    db.prepare('UPDATE person_external_links SET person_id = ? WHERE person_id = ?').run(survivorId, loserId);
+
+    if (loser.external_id) {
+      if (!survivor.external_id) {
+        // Survivor never had its own identity -- simplest case, it just
+        // adopts loser's. Cleared off loserId first since external_id
+        // is UNIQUE and loserId's row (still holding it) hasn't been
+        // deleted yet at this point in the transaction.
+        db.prepare('UPDATE persons SET external_id = NULL WHERE id = ?').run(loserId);
+        db.prepare('UPDATE persons SET external_id = ? WHERE id = ?').run(loser.external_id, survivorId);
+      } else {
+        // Both sides already had their own independent identity (each
+        // was synced/exported separately before ever being recognized
+        // as the same person). Survivor's own external_id stays
+        // canonical; loser's becomes a remembered alias so a future
+        // sync naming loser's external_id resolves straight to
+        // survivor -- same alias mechanism contentItem.js's
+        // cross-instance identity work added for content items (see
+        // contentItemExternalLink.js).
+        db.prepare('INSERT OR IGNORE INTO person_external_links (external_id, person_id) VALUES (?, ?)').run(loser.external_id, survivorId);
+      }
+    }
+
+    db.prepare('DELETE FROM persons WHERE id = ?').run(loserId);
+  });
+  run();
+
+  return get(survivorId);
+}
+
+module.exports = {
+  listAll,
+  get,
+  create,
+  update,
+  remove,
+  listShared,
+  getByExternalId,
+  ensureExternalId,
+  setExternalId,
+  mergeInto,
+};

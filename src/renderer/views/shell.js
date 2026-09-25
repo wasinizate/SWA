@@ -9,6 +9,7 @@ import { renderOrdersView } from './orders.js';
 import { renderContentLibraryView } from './contentLibrary.js';
 import { renderContentDetailView } from './contentDetail.js';
 import { renderAnalyticsView } from './analytics.js';
+import { renderFollowUpsView } from './followUps.js';
 import { renderCalendarView } from './calendar.js';
 import { renderSearchView } from './search.js';
 import { renderExpensesView } from './expenses.js';
@@ -16,6 +17,7 @@ import { renderSettingsView } from './settings.js';
 import { maybeShowDueDateSummary } from '../dueDateSummary.js';
 import { escapeHtml, previewText, SEARCH_MIN_QUERY_LENGTH } from '../helpers.js';
 import { applyTheme } from '../theme.js';
+import { matchCommands } from '../commands.js';
 
 const SIDEBAR_SEARCH_DEBOUNCE_MS = 200;
 const SIDEBAR_SEARCH_MIN_LENGTH = SEARCH_MIN_QUERY_LENGTH;
@@ -25,10 +27,13 @@ const SIDEBAR_SEARCH_PREVIEW_LIMIT = 5;
 // listeners set up below survives across multiple renderShell() calls in
 // one session (once per unlock -- see the comment at the bottom of this
 // file) without piling up a new pair of listeners on every unlock.
-// currentSearchDropdown always points at whichever dropdown element is
-// live right now.
+// currentSearchDropdown/currentSearchInput always point at whichever
+// dropdown/input element is live right now.
 let documentListenersAttached = false;
 let currentSearchDropdown = null;
+let currentSearchInput = null;
+let currentRecentContainer = null;
+let currentNavigate = null;
 
 export function renderShell(root, { onLocked }) {
   root.innerHTML = `
@@ -36,19 +41,21 @@ export function renderShell(root, { onLocked }) {
       <nav class="sidebar">
         <div class="brand">SWA</div>
         <div class="sidebar-search">
-          <input type="search" id="sidebar-search-input" placeholder="Search…" autocomplete="off" />
+          <input type="search" id="sidebar-search-input" placeholder="Search… or /command  (Ctrl+K)" autocomplete="off" />
           <div class="sidebar-search-dropdown" id="sidebar-search-dropdown" aria-hidden="true"></div>
         </div>
         <ul class="nav-list">
           <li><button class="nav-link" data-view="dashboard">Dashboard</button></li>
           <li><button class="nav-link" data-view="people">Clients</button></li>
           <li><button class="nav-link" data-view="orders">Orders</button></li>
+          <li><button class="nav-link" data-view="followUps">Follow-ups</button></li>
           <li><button class="nav-link" data-view="contentLibrary">Content</button></li>
           <li><button class="nav-link" data-view="analytics">Analytics</button></li>
           <li><button class="nav-link" data-view="calendar">Calendar</button></li>
           <li><button class="nav-link" data-view="expenses">Expenses</button></li>
           <li><button class="nav-link" data-view="settings">Settings</button></li>
         </ul>
+        <div class="sidebar-recent" id="sidebar-recent"></div>
         <button id="lock-now" class="lock-button" type="button">Lock now</button>
       </nav>
       <main class="content" id="content"></main>
@@ -64,14 +71,16 @@ export function renderShell(root, { onLocked }) {
     content.innerHTML = '';
 
     if (viewName === 'dashboard') renderDashboardView(content, { navigate });
-    else if (viewName === 'people') renderPeopleView(content, { navigate, quietOnly: params.quietOnly });
+    else if (viewName === 'people') renderPeopleView(content, { navigate, quietOnly: params.quietOnly, focusAddForm: params.focusAddForm });
     else if (viewName === 'personDetail') renderPersonDetailView(content, { navigate, personId: params.personId });
     else if (viewName === 'orderDetail') renderOrderDetailView(content, { navigate, orderId: params.orderId });
     else if (viewName === 'orders') renderOrdersView(content, { navigate });
+    else if (viewName === 'followUps') renderFollowUpsView(content, { navigate });
     else if (viewName === 'contentLibrary') renderContentLibraryView(content, { navigate });
     else if (viewName === 'contentDetail') renderContentDetailView(content, { navigate, contentItemId: params.contentItemId });
     else if (viewName === 'analytics') renderAnalyticsView(content, { navigate });
-    else if (viewName === 'calendar') renderCalendarView(content, { navigate, focusOrderId: params.focusOrderId });
+    else if (viewName === 'calendar')
+      renderCalendarView(content, { navigate, focusOrderId: params.focusOrderId, openNewEventToday: params.openNewEventToday });
     else if (viewName === 'search') renderSearchView(content, { navigate, query: params.query });
     else if (viewName === 'expenses') renderExpensesView(content, { navigate });
     else if (viewName === 'settings') renderSettingsView(content, { navigate });
@@ -87,6 +96,7 @@ export function renderShell(root, { onLocked }) {
   });
 
   setUpSidebarSearch(root, navigate);
+  setUpRecentClients(root, navigate);
 
   navigate('people');
 
@@ -109,6 +119,7 @@ function setUpSidebarSearch(root, navigate) {
   const input = root.querySelector('#sidebar-search-input');
   const dropdown = root.querySelector('#sidebar-search-dropdown');
   currentSearchDropdown = dropdown;
+  currentSearchInput = input;
 
   let debounceHandle = null;
   let requestId = 0;
@@ -193,6 +204,44 @@ function setUpSidebarSearch(root, navigate) {
     }
   }
 
+  // "/" command palette (see commands.js) -- a separate render path from
+  // renderResults() above rather than folding commands into that same
+  // query, since a command list isn't sectioned by data type the way
+  // search results are, and running one has side effects (navigating,
+  // opening a modal) instead of just linking somewhere.
+  function renderCommandResults(query) {
+    const commands = matchCommands(query);
+    if (commands.length === 0) {
+      dropdown.innerHTML = '<p class="muted">No matching commands.</p>';
+      showDropdown();
+      return;
+    }
+
+    dropdown.innerHTML = `
+      <div class="sidebar-search-section-title">Commands</div>
+      ${commands
+        .map(
+          (c, i) => `
+        <button type="button" class="sidebar-search-result sidebar-command-result" data-run-command="${i}">
+          <span class="sidebar-command-name">/${escapeHtml(c.name)}</span>
+          <span class="hint">${escapeHtml(c.description)}</span>
+        </button>`
+        )
+        .join('')}
+    `;
+    showDropdown();
+
+    dropdown.querySelectorAll('[data-run-command]').forEach((btn) => {
+      btn.addEventListener('click', () => runCommand(commands[Number(btn.dataset.runCommand)]));
+    });
+  }
+
+  function runCommand(command) {
+    hideDropdown();
+    input.value = '';
+    command.run({ navigate });
+  }
+
   async function runSearch() {
     const query = input.value.trim();
     if (query.length < SIDEBAR_SEARCH_MIN_LENGTH) {
@@ -207,11 +256,30 @@ function setUpSidebarSearch(root, navigate) {
 
   input.addEventListener('input', () => {
     clearTimeout(debounceHandle);
+    // "/" as the very first character switches into command mode --
+    // no debounce needed, matching a command is cheap (a plain array
+    // filter, not an IPC round trip the way runSearch() is).
+    if (input.value.startsWith('/')) {
+      renderCommandResults(input.value.slice(1));
+      return;
+    }
     debounceHandle = setTimeout(runSearch, SIDEBAR_SEARCH_DEBOUNCE_MS);
   });
 
+  // Enter in command mode runs the top match -- typical command-palette
+  // behavior (Slack/Discord/Linear all do this), so a command can be
+  // reached without ever touching the mouse: Ctrl+K, type "/reminder",
+  // Enter.
+  input.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' || !input.value.startsWith('/')) return;
+    event.preventDefault();
+    const commands = matchCommands(input.value.slice(1));
+    if (commands.length > 0) runCommand(commands[0]);
+  });
+
   input.addEventListener('focus', () => {
-    if (input.value.trim().length >= SIDEBAR_SEARCH_MIN_LENGTH && dropdown.innerHTML) showDropdown();
+    if (!dropdown.innerHTML) return;
+    if (input.value.startsWith('/') || input.value.trim().length >= SIDEBAR_SEARCH_MIN_LENGTH) showDropdown();
   });
 
   // Double-clicking the box itself is a shortcut straight to the full
@@ -238,6 +306,55 @@ function setUpSidebarSearch(root, navigate) {
         currentSearchDropdown.classList.remove('open');
         currentSearchDropdown.setAttribute('aria-hidden', 'true');
       }
+
+      // Global "focus search" shortcut (Ctrl+K, Cmd+K on macOS) -- works
+      // from anywhere in the app, not just when a nav element already has
+      // focus, same as the equivalent shortcut in Slack/Discord/Linear.
+      // Typing "/" once focused switches into the command palette (see
+      // the "input" listener above) -- this is just the "get there
+      // without touching the mouse" half of that.
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k' && currentSearchInput) {
+        event.preventDefault();
+        currentSearchInput.focus();
+        currentSearchInput.select();
+      }
+    });
+
+    // Fired by personDetail.js once its recordPersonView() write actually
+    // lands (not on every navigate() call, which would fire before that
+    // write completes and show stale data -- see its own comment).
+    document.addEventListener('swa:person-viewed', () => {
+      if (currentRecentContainer && currentNavigate) renderRecentClients(currentRecentContainer, currentNavigate);
     });
   }
+}
+
+// Sidebar's "Recently viewed" list (see settings.js's recordPersonView()/
+// getRecentlyViewedPersons()) -- a quick way back to whoever you were
+// just looking at without a re-search, visible on every page since it
+// lives in the sidebar rather than e.g. the Dashboard only.
+function setUpRecentClients(root, navigate) {
+  currentRecentContainer = root.querySelector('#sidebar-recent');
+  currentNavigate = navigate;
+  renderRecentClients(currentRecentContainer, navigate);
+}
+
+async function renderRecentClients(container, navigate) {
+  const recent = await window.api.settings.getRecentlyViewedPersons();
+  if (container !== currentRecentContainer) return; // superseded by a newer renderShell() call
+
+  if (recent.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="sidebar-recent-title">Recently viewed</div>
+    ${recent
+      .map((p) => `<button type="button" class="sidebar-recent-link" data-open-recent="${p.id}">${escapeHtml(p.private_label)}</button>`)
+      .join('')}
+  `;
+  container.querySelectorAll('[data-open-recent]').forEach((btn) => {
+    btn.addEventListener('click', () => navigate('personDetail', { personId: Number(btn.dataset.openRecent) }));
+  });
 }

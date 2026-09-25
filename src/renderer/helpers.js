@@ -6,10 +6,29 @@
 // person's name/notes/etc. containing "<" or "&" can't break the page.
 // (This isn't a security boundary against a malicious actor -- it's your
 // own local data -- but it keeps the UI correct.)
+// One scratch element reused across every call rather than created fresh
+// each time -- this runs once per field on every list/table row render, so
+// the DOM-creation cost adds up across a full re-render of e.g. the
+// Clients or Orders list.
+const escapeHtmlScratch = document.createElement('div');
 export function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str ?? '';
-  return div.innerHTML;
+  escapeHtmlScratch.textContent = str ?? '';
+  return escapeHtmlScratch.innerHTML;
+}
+
+// Deterministic string -> hue (0-359), so the same text always lands on
+// the same color everywhere it's shown (e.g. "OnlyFans" as both a
+// platform badge and a revenue chip on personDetail.js's id-card) without
+// maintaining a hand-picked color list per platform/tag. Pair with the
+// --chip-bg-sat/--chip-fg-sat/etc. theme tokens in main.css's .chip-color
+// rule -- this only picks the hue, not how saturated/light it renders in
+// the current theme.
+export function hashHue(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  }
+  return hash % 360;
 }
 
 export function formatDateTime(isoString) {
@@ -30,10 +49,24 @@ export function formatDateTime(isoString) {
 // floating-point rounding errors. These two functions are the only place
 // that convert to/from the human-friendly dollars-and-cents values shown
 // in forms and tables.
+// Formatters are cached per currency code rather than constructed fresh on
+// every call -- this runs once per money value on every order/expense/
+// income row in a list render, and Intl.NumberFormat construction is
+// noticeably more expensive than reusing an already-built instance.
+const moneyFormatters = new Map();
+function getMoneyFormatter(currency) {
+  let formatter = moneyFormatters.get(currency);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(undefined, { style: 'currency', currency });
+    moneyFormatters.set(currency, formatter);
+  }
+  return formatter;
+}
+
 export function formatMoney(cents, currency = 'USD') {
   const dollars = (cents ?? 0) / 100;
   try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(dollars);
+    return getMoneyFormatter(currency).format(dollars);
   } catch (err) {
     // Intl throws on an unrecognized currency code -- fall back gracefully
     // instead of breaking the whole row.
@@ -90,6 +123,18 @@ export const ORDER_STATUSES = [
   { value: 'cancelled', label: 'Cancelled' },
 ];
 
+// The quick-status <select> on orders.js's and personDetail.js's order
+// tables lets status flip to Completed in one click, with no visibility
+// into the order's own `date_paid` field (that only lives on the order's
+// full page -- see orderDetail.js). Every revenue figure in this app
+// (Client value, Client totals, Analytics, platform-revenue-by-year)
+// requires date_paid to be set, so marking Completed is meant to CLOSE
+// the order out -- see closeOrderModal.js, which both call sites open
+// when this returns true instead of applying the status change directly.
+export function needsPaymentDateBeforeClosing(order, newStatus) {
+  return newStatus === 'completed' && !order.date_paid;
+}
+
 // The fixed set of client priority levels (see 0013_person_priority.sql)
 // -- same "free text with a small fixed set" convention as
 // ORDER_STATUSES above, and as calendar.js's own PRIORITY_OPTIONS for
@@ -109,6 +154,23 @@ export function priorityBadgeHtml(priority) {
   const match = PRIORITY_OPTIONS.find((p) => p.value === priority);
   const label = match ? match.label : priority;
   return `<span class="priority-badge priority-${escapeHtml(priority)}">${escapeHtml(label)}</span>`;
+}
+
+// The fixed set of person_interactions.type presets (see
+// 0018_person_interactions.sql) -- same "free text with a small fixed
+// set" convention as ORDER_STATUSES/PRIORITY_OPTIONS above: the schema
+// doesn't enforce these, this is just what the quick-add form on a
+// client's page offers.
+export const INTERACTION_TYPE_OPTIONS = [
+  { value: 'note', label: 'Note' },
+  { value: 'custom_request', label: 'Custom request' },
+  { value: 'payment_promise', label: 'Payment promise' },
+  { value: 'risk_flag', label: 'Risk flag' },
+];
+
+export function interactionTypeLabel(value) {
+  const match = INTERACTION_TYPE_OPTIONS.find((t) => t.value === value);
+  return match ? match.label : value;
 }
 
 export function orderStatusLabel(value) {

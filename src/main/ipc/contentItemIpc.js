@@ -24,6 +24,9 @@ function registerContentItemIpc() {
     contentItemRepo.setPricePaid(orderId, contentItemId, priceCents)
   );
   ipcMain.handle('contentItem:findByTitle', (_event, title) => contentItemRepo.findByTitle(title));
+  ipcMain.handle('contentItem:listMatchingPersonInterests', (_event, personId) =>
+    contentItemRepo.listMatchingPersonInterests(personId)
+  );
 
   ipcMain.handle('contentItem:getSalesDetail', (_event, contentItemId) => contentItemRepo.getSalesDetail(contentItemId));
 

@@ -13,10 +13,13 @@ function registerOrderIpc() {
   ipcMain.handle('order:update', (_event, id, data) => orderRepo.update(id, data));
   ipcMain.handle('order:delete', (_event, id) => orderRepo.remove(id));
   ipcMain.handle('order:getTotalsByPerson', (_event, personId) => orderRepo.getTotalsByPerson(personId));
+  ipcMain.handle('order:getClientValueSummary', (_event, personId) => orderRepo.getClientValueSummary(personId));
+  ipcMain.handle('order:getRevenueByPlatformForPerson', (_event, personId) => orderRepo.getRevenueByPlatformForPerson(personId));
   ipcMain.handle('order:listWithDeliveryDueDates', () => orderRepo.listWithDeliveryDueDates());
   ipcMain.handle('order:getDueDateSummary', () => orderRepo.getDueDateSummary(settingsRepo.getOrderDueReminderDaysBefore()));
   ipcMain.handle('order:getOpenOrderCount', () => orderRepo.getOpenOrderCount());
   ipcMain.handle('order:listLastOrderDateByPerson', () => orderRepo.listLastOrderDateByPerson());
+  ipcMain.handle('order:listLifetimeSpendByPerson', () => orderRepo.listLifetimeSpendByPerson());
   ipcMain.handle('order:getSlatedIncomeTotals', () => orderRepo.getSlatedIncomeTotals());
   ipcMain.handle('order:getTotalsAll', () => orderRepo.getTotalsAll());
   ipcMain.handle('order:exportPdf', (event, orderId) => {

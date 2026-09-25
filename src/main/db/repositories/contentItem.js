@@ -205,6 +205,39 @@ function findByTitle(title) {
   return getDb().prepare('SELECT * FROM content_items WHERE title = ? COLLATE NOCASE').get((title || '').trim());
 }
 
+// Content items that share at least one tag with this person's own tags
+// (a client tagged "feet" surfaces content also tagged "feet"), for the
+// client page's "Content matches" card -- turns the shared tags
+// vocabulary (persons and content items both tag from the same table,
+// see tag.js's top comment) into an actual upsell prompt instead of
+// just a filter. Excludes anything already attached to one of this
+// person's own orders, regardless of that order's status -- already
+// offered/sold isn't a fresh suggestion. matched_tags rides along (same
+// correlated-subquery shape as search.js's content query) so the UI can
+// show *which* shared interest is the reason for the suggestion.
+function listMatchingPersonInterests(personId) {
+  return getDb()
+    .prepare(
+      `SELECT DISTINCT content_items.*,
+              (SELECT GROUP_CONCAT(tags.label, ', ')
+               FROM content_item_tags JOIN tags ON tags.id = content_item_tags.tag_id
+               WHERE content_item_tags.content_item_id = content_items.id
+                 AND content_item_tags.tag_id IN (SELECT tag_id FROM person_tags WHERE person_id = ?)
+              ) AS matched_tags
+       FROM content_items
+       JOIN content_item_tags ON content_item_tags.content_item_id = content_items.id
+       WHERE content_item_tags.tag_id IN (SELECT tag_id FROM person_tags WHERE person_id = ?)
+         AND content_items.id NOT IN (
+           SELECT order_content_items.content_item_id
+           FROM order_content_items
+           JOIN orders ON orders.id = order_content_items.order_id
+           WHERE orders.person_id = ?
+         )
+       ORDER BY content_items.title COLLATE NOCASE`
+    )
+    .all(personId, personId, personId);
+}
+
 // ---- Cross-instance portable identity (see
 // 0017_content_item_external_id.sql) -- exact same shape as
 // person.js's own getByExternalId()/ensureExternalId()/setExternalId(),
@@ -280,6 +313,7 @@ module.exports = {
   removeFromOrder,
   setPricePaid,
   findByTitle,
+  listMatchingPersonInterests,
   getByExternalId,
   ensureExternalId,
   setExternalId,
