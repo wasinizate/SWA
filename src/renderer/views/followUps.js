@@ -9,17 +9,13 @@
 // month grid, and this app's calendar_events table has no concept of a
 // person-level (order-independent) reminder anyway.
 
-import { escapeHtml, interactionTypeLabel, formatDateTime } from '../helpers.js';
+import { escapeHtml, interactionTypeLabel, formatDateTime, loadingHtml } from '../helpers.js';
 import { showToast } from '../toast.js';
 
 export function renderFollowUpsView(container, { navigate }) {
   container.innerHTML = `
     <h1>Follow-ups</h1>
-    <p class="hint">
-      Logged from a client's own page (Activity card -&gt; add a follow-up date). Mark one done once
-      you've actually followed up -- it won't reappear here, but stays visible in that client's timeline.
-    </p>
-    <div id="followups-body">Loading…</div>
+    <div id="followups-body">${loadingHtml()}</div>
   `;
 
   refresh();

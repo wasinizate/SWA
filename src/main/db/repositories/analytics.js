@@ -61,28 +61,38 @@ function getRevenueByPriority() {
 
 // Orders with no linked platform account are excluded -- can't
 // attribute revenue to a platform without one (noted in the UI copy,
-// not hidden silently).
+// not hidden silently). Platform names are free text, so grouping is
+// case-insensitive: "OnlyFans" and "onlyfans" are one platform.
 function getRevenueByPlatform() {
   return getDb()
     .prepare(
-      `SELECT platform_accounts.platform_name,
+      `SELECT MIN(platform_accounts.platform_name) AS platform_name,
               COUNT(*) AS order_count,
               COALESCE(SUM(orders.amount_cents), 0) AS total_cents
        FROM orders
        JOIN platform_accounts ON platform_accounts.id = orders.platform_account_id
        WHERE ${CONFIRMED_SALE_WHERE}
-       GROUP BY platform_accounts.platform_name
+       GROUP BY platform_accounts.platform_name COLLATE NOCASE
        ORDER BY total_cents DESC`
     )
     .all();
 }
 
-// Reuses order.js's own byMonth grouping rather than re-deriving it,
-// sliced to the most recent `months` entries and reversed to
-// chronological (oldest-first) order for a left-to-right chart.
+// The last `months` calendar months ending with the current (local) month,
+// oldest first, with $0 for months that had no sales. (It used to take
+// the most recent months that *had* revenue, so empty months vanished and
+// bars from a year apart sat side by side as if consecutive.)
 function getMonthlyRevenueTrend(months = 12) {
-  const byMonth = orderRepo.getTotalsAll().byMonth; // already DESC (newest first)
-  return byMonth.slice(0, months).reverse();
+  const totals = new Map(orderRepo.getTotalsAll().byMonth.map((m) => [m.period, m.total_cents]));
+  const pad = (n) => String(n).padStart(2, '0');
+  const now = new Date();
+  const trend = [];
+  for (let back = months - 1; back >= 0; back--) {
+    const month = new Date(now.getFullYear(), now.getMonth() - back, 1);
+    const period = `${month.getFullYear()}-${pad(month.getMonth() + 1)}`;
+    trend.push({ period, total_cents: totals.get(period) || 0 });
+  }
+  return trend;
 }
 
 module.exports = { getOverview, getTopSpenders, getRevenueByPriority, getRevenueByPlatform, getMonthlyRevenueTrend };

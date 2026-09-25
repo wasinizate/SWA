@@ -3,7 +3,7 @@
 // Click an order's "#" to open its own page (see orderDetail.js) for full
 // editing, or a client's name to jump to their profile instead.
 
-import { escapeHtml, formatMoney, previewText, ORDER_STATUSES, buildStatusOptions, loadingHtml, needsPaymentDateBeforeClosing } from '../helpers.js';
+import { escapeHtml, formatMoney, previewText, ORDER_STATUSES, buildStatusOptions, loadingHtml, needsPaymentDateBeforeClosing, ipcErrorMessage } from '../helpers.js';
 import { showToast } from '../toast.js';
 import { openModal } from '../modal.js';
 import { renderImportPanel } from '../importPanel.js';
@@ -93,8 +93,9 @@ export function renderOrdersView(container, { navigate }) {
     // "Placed" means created_at, not date_paid -- date_paid is NULL for
     // anything not yet paid, which would otherwise bury pending orders
     // at the bottom of a date_paid sort.
+    // created_at is a UTC ISO string, so string order is time order.
     orders = [...orders].sort((a, b) => {
-      const diff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      const diff = a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0;
       return sortSelect.value === 'placed_asc' ? diff : -diff;
     });
 
@@ -127,60 +128,57 @@ export function renderOrdersView(container, { navigate }) {
         </tr>`
       )
       .join('');
-
-    rowsEl.querySelectorAll('[data-open-order]').forEach((btn) => {
-      btn.addEventListener('click', () => navigate('orderDetail', { orderId: Number(btn.dataset.openOrder) }));
-    });
-
-    rowsEl.querySelectorAll('[data-open-person]').forEach((btn) => {
-      btn.addEventListener('click', () => navigate('personDetail', { personId: Number(btn.dataset.openPerson) }));
-    });
-
-    rowsEl.querySelectorAll('.quick-status').forEach((select) => {
-      const order = orders.find((o) => o.id === Number(select.dataset.quickStatus));
-      select.value = order.status;
-      select.addEventListener('change', async () => {
-        const newStatus = select.value;
-
-        if (needsPaymentDateBeforeClosing(order, newStatus)) {
-          select.value = order.status; // only re-applied if the close-out modal is actually submitted
-          openCloseOrderModal({
-            order,
-            onClose: async (datePaid) => {
-              await window.api.order.update(order.id, { status: 'completed', datePaid });
-              await load();
-            },
-          });
-          return;
-        }
-
-        await window.api.order.update(order.id, { status: newStatus });
-        await load();
-      });
-    });
-
-    rowsEl.querySelectorAll('[data-export-pdf]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        btn.disabled = true;
-        try {
-          const savedPath = await window.api.order.exportPdf(Number(btn.dataset.exportPdf));
-          if (savedPath) showToast(`Saved PDF to: ${savedPath}`);
-        } catch (err) {
-          alert(`Failed to export PDF: ${err.message}`);
-        } finally {
-          btn.disabled = false;
-        }
-      });
-    });
-
-    rowsEl.querySelectorAll('[data-delete]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        if (!confirm('Delete this order?')) return;
-        await window.api.order.delete(Number(btn.dataset.delete));
-        await load();
-      });
-    });
   }
+
+  // One listener each on the table body (event delegation) instead of four
+  // listeners plus an order lookup per row -- with thousands of orders the
+  // per-row version took over ten seconds to render.
+  rowsEl.addEventListener('click', async (event) => {
+    const target = event.target.closest('button');
+    if (!target || !rowsEl.contains(target)) return;
+
+    if (target.dataset.openOrder) {
+      navigate('orderDetail', { orderId: Number(target.dataset.openOrder) });
+    } else if (target.dataset.openPerson) {
+      navigate('personDetail', { personId: Number(target.dataset.openPerson) });
+    } else if (target.dataset.exportPdf) {
+      target.disabled = true;
+      try {
+        const savedPath = await window.api.order.exportPdf(Number(target.dataset.exportPdf));
+        if (savedPath) showToast(`Saved PDF to: ${savedPath}`);
+      } catch (err) {
+        alert(`Failed to export PDF: ${ipcErrorMessage(err)}`);
+      } finally {
+        target.disabled = false;
+      }
+    } else if (target.dataset.delete) {
+      if (!confirm('Delete this order?')) return;
+      await window.api.order.delete(Number(target.dataset.delete));
+      await load();
+    }
+  });
+
+  rowsEl.addEventListener('change', async (event) => {
+    const select = event.target.closest('.quick-status');
+    if (!select) return;
+    const order = allOrders.find((o) => o.id === Number(select.dataset.quickStatus));
+    const newStatus = select.value;
+
+    if (needsPaymentDateBeforeClosing(order, newStatus)) {
+      select.value = order.status; // only re-applied if the close-out modal is actually submitted
+      openCloseOrderModal({
+        order,
+        onClose: async (datePaid) => {
+          await window.api.order.update(order.id, { status: 'completed', datePaid });
+          await load();
+        },
+      });
+      return;
+    }
+
+    await window.api.order.update(order.id, { status: newStatus });
+    await load();
+  });
 
   filterSelect.addEventListener('change', render);
   sortSelect.addEventListener('change', render);

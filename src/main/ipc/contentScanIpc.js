@@ -1,5 +1,6 @@
 'use strict';
 
+const fs = require('fs');
 const { ipcMain, dialog, shell, BrowserWindow } = require('electron');
 const settingsRepo = require('../db/repositories/settings');
 const contentScanner = require('../scanner/contentScanner');
@@ -31,8 +32,22 @@ function registerContentScanIpc() {
   // from a manually-typed Location too (see contentDetail.js's "Open
   // folder" button). shell.openPath() resolves with an error string on
   // failure rather than rejecting, per Electron's own convention here.
+  //
+  // Folders open in the file manager; a *file* location is revealed in
+  // its folder instead of opened, since shell.openPath() on a file runs
+  // it -- an .exe or script typed into Location would execute.
   ipcMain.handle('contentScan:openPath', async (_event, targetPath) => {
     if (!targetPath) return;
+    let stats;
+    try {
+      stats = fs.statSync(targetPath);
+    } catch {
+      throw new Error("That location doesn't exist (moved, renamed, or its drive isn't connected).");
+    }
+    if (!stats.isDirectory()) {
+      shell.showItemInFolder(targetPath);
+      return;
+    }
     const errorMessage = await shell.openPath(targetPath);
     if (errorMessage) throw new Error(errorMessage);
   });

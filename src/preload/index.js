@@ -53,6 +53,8 @@ contextBridge.exposeInMainWorld('api', {
     delete: (id) => ipcRenderer.invoke('platformAccount:delete', id),
     findByPlatformAndUsername: (platformName, username, options) =>
       ipcRenderer.invoke('platformAccount:findByPlatformAndUsername', platformName, username, options),
+    isKnownPlatform: (platformName) => ipcRenderer.invoke('platformAccount:isKnownPlatform', platformName),
+    openProfile: (accountId) => ipcRenderer.invoke('platformAccount:openProfile', accountId),
   },
   tag: {
     listAll: () => ipcRenderer.invoke('tag:listAll'),
@@ -223,6 +225,11 @@ contextBridge.exposeInMainWorld('api', {
     create: () => ipcRenderer.invoke('backup:create'),
     pickFile: () => ipcRenderer.invoke('backup:pickFile'),
     restore: (filePath, passphrase) => ipcRenderer.invoke('backup:restore', { filePath, passphrase }),
+    getStatus: () => ipcRenderer.invoke('backup:getStatus'),
+    pickAutoFolder: () => ipcRenderer.invoke('backup:pickAutoFolder'),
+    setAutoEnabled: (enabled) => ipcRenderer.invoke('backup:setAutoEnabled', enabled),
+    setAutoKeep: (keep) => ipcRenderer.invoke('backup:setAutoKeep', keep),
+    runAutoNow: () => ipcRenderer.invoke('backup:runAutoNow'),
   },
   sync: {
     getStatus: () => ipcRenderer.invoke('sync:getStatus'),

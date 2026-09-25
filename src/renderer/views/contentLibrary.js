@@ -4,7 +4,7 @@
 // per-item view). Same overall shape as people.js -- a filterable
 // table, inline "add", link into the detail view.
 
-import { escapeHtml, formatMoney, CONTENT_TYPE_PRESETS } from '../helpers.js';
+import { escapeHtml, formatMoney, CONTENT_TYPE_PRESETS, ipcErrorMessage } from '../helpers.js';
 import { openModal } from '../modal.js';
 import { showToast } from '../toast.js';
 
@@ -83,7 +83,7 @@ export function renderContentLibraryView(container, { navigate }) {
       showToast(`Scan complete: ${parts.join(', ')}.`);
       await refresh();
     } catch (err) {
-      showToast(err.message || 'Scan failed.');
+      showToast(ipcErrorMessage(err) || 'Scan failed.');
     } finally {
       scanChooseFolderBtn.disabled = false;
       scanRunBtn.disabled = false;

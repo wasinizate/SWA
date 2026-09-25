@@ -26,10 +26,12 @@ import {
   fromDateInputValue,
   loadingHtml,
   previewText,
+  ipcErrorMessage,
 } from '../helpers.js';
 import { isLightTheme } from '../theme.js';
 import { showToast } from '../toast.js';
 import { openModal } from '../modal.js';
+import { loadFullCalendar } from '../fullCalendarLoader.js';
 
 const EVENT_TYPE_PRESETS = ['Delivery deadline', 'Custom shoot', 'Screening call', 'Follow-up', 'Personal reminder', 'Other'];
 
@@ -78,6 +80,17 @@ function toDateKey(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+// An all-day event is stored with its *last* day as the end (what the
+// form shows), but FullCalendar treats an all-day end as exclusive -- so
+// a Sep 24-26 event has to be handed over ending on the 27th, or it
+// draws a day short.
+function dayAfter(isoString) {
+  if (!isoString) return undefined;
+  const date = new Date(isoString);
+  date.setDate(date.getDate() + 1);
+  return date.toISOString();
+}
+
 export function renderCalendarView(container, { navigate, focusOrderId, openNewEventToday }) {
   // FullCalendar's built-in dark palette is only appropriate for this
   // app's dark themes -- Sakura is light, so let FullCalendar fall back
@@ -107,7 +120,7 @@ export function renderCalendarView(container, { navigate, focusOrderId, openNewE
       const savedPath = await window.api.calendarEvent.exportAllIcs();
       if (savedPath) showToast(`Saved to: ${savedPath}`);
     } catch (err) {
-      alert(`Failed to export: ${err.message}`);
+      alert(`Failed to export: ${ipcErrorMessage(err)}`);
     }
   });
 
@@ -124,7 +137,7 @@ export function renderCalendarView(container, { navigate, focusOrderId, openNewE
       showToast(parts.join(', ') + '.');
       await refreshCalendar();
     } catch (err) {
-      alert(`Failed to import: ${err.message}`);
+      alert(`Failed to import: ${ipcErrorMessage(err)}`);
     }
   });
 
@@ -145,14 +158,21 @@ export function renderCalendarView(container, { navigate, focusOrderId, openNewE
 
     eventsById = new Map(events.map((e) => [e.id, e]));
 
-    const calendarEventObjects = events.map((e) => ({
-      id: String(e.id),
-      title: e.title,
-      start: e.start_datetime,
-      end: e.end_datetime || undefined,
-      allDay: !!e.all_day,
-      color: priorityColor(e.priority),
-    }));
+    // `color` is left out entirely for normal priority: FullCalendar v7
+    // writes a present-but-undefined color into its CSS as the literal
+    // "undefined", which drew every normal event with no color at all
+    // (invisible all-day bars, black dots).
+    const calendarEventObjects = events.map((e) => {
+      const color = priorityColor(e.priority);
+      return {
+        id: String(e.id),
+        title: e.title,
+        start: e.start_datetime,
+        end: e.all_day ? dayAfter(e.end_datetime) : e.end_datetime || undefined,
+        allDay: !!e.all_day,
+        ...(color ? { color } : {}),
+      };
+    });
 
     // Amber/orange, distinct from the theme's default event color, so
     // "an order is due" reads differently at a glance from "you have a
@@ -173,6 +193,7 @@ export function renderCalendarView(container, { navigate, focusOrderId, openNewE
   }
 
   async function refreshCalendar() {
+    if (!calendar) return; // still loading; the initial load picks up the change
     const events = await loadEvents();
     calendar.removeAllEventSources();
     calendar.addEventSource(events);
@@ -192,7 +213,9 @@ export function renderCalendarView(container, { navigate, focusOrderId, openNewE
       // Highlights the day a Search-result deep link (search.js) landed
       // on, so it's visually obvious in month view rather than just
       // scrolled-to -- see .calendar-target-day in main.css.
-      dayCellClassNames: (arg) => (targetDateStr && toDateKey(arg.date) === targetDateStr ? ['calendar-target-day'] : []),
+      // (FullCalendar v7's name for this; v6's `dayCellClassNames` is
+      // silently ignored apart from a console warning.)
+      dayCellClass: (arg) => (targetDateStr && toDateKey(arg.date) === targetDateStr ? 'calendar-target-day' : ''),
       // Clicking a day cell in month view always reports allDay: true
       // (a day cell has no time granularity) -- but defaulting new
       // events to timed, not all-day, makes it obvious at a glance that
@@ -228,7 +251,7 @@ export function renderCalendarView(container, { navigate, focusOrderId, openNewE
     try {
       result = await fetchDataUrl();
     } catch (err) {
-      alert(`Failed to generate QR code: ${err.message}`);
+      alert(`Failed to generate QR code: ${ipcErrorMessage(err)}`);
       return;
     }
 
@@ -276,7 +299,7 @@ export function renderCalendarView(container, { navigate, focusOrderId, openNewE
             const savedPath = await window.api.calendarEvent.exportOrderDueIcs(orderId);
             if (savedPath) showToast(`Saved to: ${savedPath}`);
           } catch (err) {
-            alert(`Failed to export: ${err.message}`);
+            alert(`Failed to export: ${ipcErrorMessage(err)}`);
           }
         });
 
@@ -535,6 +558,12 @@ export function renderCalendarView(container, { navigate, focusOrderId, openNewE
         linkedOrderId: orderSelect.value ? Number(orderSelect.value) : null,
       };
 
+      if (payload.endDatetime && payload.startDatetime && new Date(payload.endDatetime) < new Date(payload.startDatetime)) {
+        showToast("The end can't be before the start.");
+        endInput.focus();
+        return;
+      }
+
       if (isEditing) {
         await window.api.calendarEvent.update(data.id, payload);
       } else {
@@ -550,7 +579,7 @@ export function renderCalendarView(container, { navigate, focusOrderId, openNewE
           const savedPath = await window.api.calendarEvent.exportIcs(data.id);
           if (savedPath) showToast(`Saved to: ${savedPath}`);
         } catch (err) {
-          alert(`Failed to export: ${err.message}`);
+          alert(`Failed to export: ${ipcErrorMessage(err)}`);
         }
       });
 
@@ -579,7 +608,16 @@ export function renderCalendarView(container, { navigate, focusOrderId, openNewE
   }
 
   (async () => {
-    const initialEvents = await loadEvents();
+    const mount = container.querySelector('#calendar-mount');
+    let initialEvents;
+    try {
+      [initialEvents] = await Promise.all([loadEvents(), loadFullCalendar()]);
+    } catch (err) {
+      mount.innerHTML = `<p class="error">${escapeHtml(ipcErrorMessage(err))}</p>`;
+      return;
+    }
+    // Navigated away while the calendar was still loading.
+    if (!mount.isConnected) return;
 
     // A Search result for an order with a due date (search.js) can pass
     // focusOrderId to land here already centered on that date -- resolved

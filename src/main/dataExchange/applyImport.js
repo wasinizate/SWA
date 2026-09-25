@@ -23,6 +23,7 @@
 // or a client's notes and exporting back is something the original
 // sender can actually pull in, not just a no-op re-import.
 
+const { getDb } = require('../db/connection');
 const personRepo = require('../db/repositories/person');
 const orderRepo = require('../db/repositories/order');
 const platformAccountRepo = require('../db/repositories/platformAccount');
@@ -248,7 +249,15 @@ function previewImport(bundle) {
 //     field-level diffs previewImport() surfaced. When false, behavior
 //     matches the original one-directional-handoff design: new orders
 //     still insert, existing ones are left untouched.
+// All or nothing: one transaction, so a failure partway through (say, a
+// corrupt attachment in the fourth order) can't leave the client and the
+// first three orders imported and the rest missing. Repository calls that
+// open their own transaction inside become savepoints of this one.
 function applyImport(bundle, resolution = {}) {
+  return getDb().transaction(() => applyImportSteps(bundle, resolution))();
+}
+
+function applyImportSteps(bundle, resolution) {
   let personId = resolvePersonId(bundle.person.externalId);
 
   if (personId === null) {

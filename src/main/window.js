@@ -29,6 +29,17 @@ function createMainWindow() {
 
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 
+  // The window only ever shows the app itself. Without this, dropping a
+  // file anywhere outside an upload box navigated the whole window to that
+  // file (the app vanished until restart), and a stray link could open new
+  // windows. Reloading the app's own page (e.g. after a restore) stays
+  // allowed; profile links etc. go through shell.openExternal instead.
+  const appPageUrl = () => win.webContents.getURL().split('#')[0];
+  win.webContents.on('will-navigate', (event, url) => {
+    if (url.split('#')[0] !== appPageUrl()) event.preventDefault();
+  });
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
   // Forwards renderer-side console warnings/errors (including CSP
   // violations, which show up as console errors, not thrown exceptions)
   // into the main process's own stdout -- handy for diagnosing renderer

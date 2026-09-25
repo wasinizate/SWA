@@ -10,8 +10,10 @@
 
 let container = null;
 
+// Re-created if something removed it (app.js clears toasts when the vault
+// locks, so they can't linger over the lock screen).
 function getContainer() {
-  if (!container) {
+  if (!container || !container.isConnected) {
     container = document.createElement('div');
     container.className = 'toast-container';
     document.body.appendChild(container);

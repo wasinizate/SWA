@@ -5,6 +5,8 @@
 // memorized, so the app doesn't let you back in until a real passphrase
 // is set again.
 
+import { ipcErrorMessage } from '../helpers.js';
+
 export function renderForcePassphraseResetView(root, { onComplete }) {
   root.innerHTML = `
     <div class="centered-screen">
@@ -58,7 +60,7 @@ export function renderForcePassphraseResetView(root, { onComplete }) {
       await window.api.vault.changePassphrase(passphrase);
       onComplete();
     } catch (err) {
-      showError(err.message);
+      showError(ipcErrorMessage(err));
     }
   });
 }

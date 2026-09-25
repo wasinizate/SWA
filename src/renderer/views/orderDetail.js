@@ -4,7 +4,16 @@
 // (personDetail.js creates a blank one and navigates straight here), so
 // unlike the old inline form, there's no create/edit mode switch to track.
 
-import { escapeHtml, formatMoney, parseMoneyToCents, PAYMENT_METHOD_PRESETS, buildStatusOptions, loadingHtml } from '../helpers.js';
+import {
+  escapeHtml,
+  formatMoney,
+  parseMoneyToCents,
+  PAYMENT_METHOD_PRESETS,
+  buildStatusOptions,
+  loadingHtml,
+  ipcErrorMessage,
+  toDateInputValue,
+} from '../helpers.js';
 import { promptForPassphrase } from '../exportPassphrasePrompt.js';
 import { createAttachmentGrid } from '../attachmentGrid.js';
 import { createLineItemRows } from '../lineItemRows.js';
@@ -14,22 +23,27 @@ import { attachTagAutocomplete } from '../tagAutocomplete.js';
 import { priceSliderHtml, wirePriceSlider } from '../priceSlider.js';
 
 export function renderOrderDetailView(container, { navigate, orderId }) {
+  const setTitle = navigate.titleSetter();
   container.innerHTML = loadingHtml();
   load();
 
   async function load() {
     const order = await window.api.order.get(orderId);
     if (!order) {
-      container.innerHTML = '<p>Order not found.</p><button id="back" type="button">Back to Clients</button>';
-      container.querySelector('#back').addEventListener('click', () => navigate('people'));
+      showToast('That order no longer exists.');
+      navigate.back('orders');
       return;
     }
+    setTitle(`Order #${order.id}`);
 
-    const person = await window.api.person.get(order.person_id);
-    const accounts = await window.api.platformAccount.listByPerson(order.person_id);
+    const [person, accounts] = await Promise.all([
+      window.api.person.get(order.person_id),
+      window.api.platformAccount.listByPerson(order.person_id),
+    ]);
+    const backToClient = () => navigate.back('personDetail', { personId: order.person_id });
 
     container.innerHTML = `
-      <button class="link-button" id="back" type="button">&larr; Back to ${escapeHtml(person.private_label)}</button>
+      <button class="link-button" id="back" type="button">&larr; Back to ${escapeHtml(navigate.backLabel(person.private_label))}</button>
       <h1>Order #${order.id}</h1>
 
       <section class="card">
@@ -154,13 +168,30 @@ export function renderOrderDetailView(container, { navigate, orderId }) {
       </section>
     `;
 
-    container.querySelector('#back').addEventListener('click', () => navigate('personDetail', { personId: order.person_id }));
+    container.querySelector('#back').addEventListener('click', backToClient);
 
     // ---- Save / export / delete ----------------------------------------
 
+    // Completed means paid: every revenue figure needs a payment date, so
+    // picking Completed fills in today (still editable), and saving
+    // Completed with the date cleared is stopped with a reason -- the same
+    // rule the list pages' close-order modal enforces.
+    const statusSelect = container.querySelector('#order-status');
+    const datePaidInput = container.querySelector('#order-date-paid');
+    statusSelect.addEventListener('change', () => {
+      if (statusSelect.value === 'completed' && !datePaidInput.value) {
+        datePaidInput.value = toDateInputValue(new Date().toISOString());
+        showToast('Date paid set to today. Change it if it was paid another day.');
+      }
+    });
+
     container.querySelector('#order-form').addEventListener('submit', async (event) => {
       event.preventDefault();
-      const accountValue = container.querySelector('#order-account').value;
+      if (statusSelect.value === 'completed' && !datePaidInput.value) {
+        showToast("Add the date it was paid. Completed orders without one don't count toward revenue.");
+        datePaidInput.focus();
+        return;
+      }      const accountValue = container.querySelector('#order-account').value;
       await window.api.order.update(orderId, {
         platformAccountId: accountValue ? Number(accountValue) : null,
         amountCents: parseMoneyToCents(container.querySelector('#order-amount').value),
@@ -183,7 +214,7 @@ export function renderOrderDetailView(container, { navigate, orderId }) {
         const savedPath = await window.api.order.exportPdf(orderId);
         if (savedPath) showToast(`Saved PDF to: ${savedPath}`);
       } catch (err) {
-        alert(`Failed to export PDF: ${err.message}`);
+        alert(`Failed to export PDF: ${ipcErrorMessage(err)}`);
       } finally {
         btn.disabled = false;
       }
@@ -206,14 +237,14 @@ export function renderOrderDetailView(container, { navigate, orderId }) {
         const savedPath = await window.api.dataExchange.exportOrder(orderId, order.person_id, passphrase);
         if (savedPath) showToast(`Saved to: ${savedPath}`);
       } catch (err) {
-        alert(`Failed to export: ${err.message}`);
+        alert(`Failed to export: ${ipcErrorMessage(err)}`);
       }
     });
 
     container.querySelector('#order-delete').addEventListener('click', async () => {
       if (!confirm('Delete this order? This cannot be undone.')) return;
       await window.api.order.delete(orderId);
-      navigate('personDetail', { personId: order.person_id });
+      backToClient();
     });
 
     // ---- Price calculator (rows are client-side only; templates are the

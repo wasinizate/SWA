@@ -3,6 +3,8 @@
 // phrase can be set up afterward in Settings, but by default losing the
 // passphrase means losing the data. See the README threat model.
 
+import { ipcErrorMessage } from '../helpers.js';
+
 export function renderSetupView(root, { onComplete }) {
   root.innerHTML = `
     <div class="centered-screen">
@@ -55,7 +57,7 @@ export function renderSetupView(root, { onComplete }) {
       await window.api.vault.setup(passphrase);
       onComplete();
     } catch (err) {
-      showError(err.message);
+      showError(ipcErrorMessage(err));
     }
   });
 }

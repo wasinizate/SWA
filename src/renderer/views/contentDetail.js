@@ -2,25 +2,27 @@
 // clients -- see contentItem.js's comments), and its sales history.
 // Mirrors personDetail.js's shape.
 
-import { escapeHtml, formatMoney, formatBytes, formatDateTime, CONTENT_TYPE_PRESETS } from '../helpers.js';
+import { escapeHtml, formatMoney, formatBytes, formatDateTime, CONTENT_TYPE_PRESETS, ipcErrorMessage } from '../helpers.js';
 import { showToast } from '../toast.js';
 import { attachTagAutocomplete } from '../tagAutocomplete.js';
 import { priceSliderHtml, wirePriceSlider } from '../priceSlider.js';
 
 export function renderContentDetailView(container, { navigate, contentItemId }) {
+  const setTitle = navigate.titleSetter();
   container.innerHTML = '<p class="loading-state">Loading…</p>';
   load();
 
   async function load() {
     const item = await window.api.contentItem.get(contentItemId);
     if (!item) {
-      container.innerHTML = '<p>Content item not found.</p><button id="back" type="button">Back to Content library</button>';
-      container.querySelector('#back').addEventListener('click', () => navigate('contentLibrary'));
+      showToast('That content item no longer exists.');
+      navigate.back('contentLibrary');
       return;
     }
+    setTitle(item.title);
 
     container.innerHTML = `
-      <button class="link-button" id="back" type="button">&larr; Back to Content library</button>
+      <button class="link-button" id="back" type="button">&larr; Back to ${escapeHtml(navigate.backLabel('Content library'))}</button>
       <h1>${escapeHtml(item.title)}</h1>
       ${
         item.is_scanned
@@ -102,7 +104,7 @@ export function renderContentDetailView(container, { navigate, contentItemId }) 
       </section>
     `;
 
-    container.querySelector('#back').addEventListener('click', () => navigate('contentLibrary'));
+    container.querySelector('#back').addEventListener('click', () => navigate.back('contentLibrary'));
 
     container.querySelector('#ci-open-folder').addEventListener('click', async () => {
       const targetPath = container.querySelector('#ci-location').value.trim();
@@ -113,7 +115,7 @@ export function renderContentDetailView(container, { navigate, contentItemId }) 
       try {
         await window.api.contentScan.openPath(targetPath);
       } catch (err) {
-        showToast(err.message || "Couldn't open that location.");
+        showToast(ipcErrorMessage(err) || "Couldn't open that location.");
       }
     });
 
@@ -126,6 +128,7 @@ export function renderContentDetailView(container, { navigate, contentItemId }) 
         location: container.querySelector('#ci-location').value,
       });
       container.querySelector('h1').textContent = updated.title;
+      setTitle(updated.title);
       showToast('Saved.');
     });
 
@@ -139,7 +142,7 @@ export function renderContentDetailView(container, { navigate, contentItemId }) 
     container.querySelector('#ci-delete').addEventListener('click', async () => {
       if (!confirm('Delete this content item? It will be removed from any orders it was attached to.')) return;
       await window.api.contentItem.delete(contentItemId);
-      navigate('contentLibrary');
+      navigate.back('contentLibrary');
     });
 
     // ---- Tags -------------------------------------------------------

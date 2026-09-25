@@ -14,6 +14,17 @@ function escapeHtml(value) {
     .replace(/"/g, '&quot;');
 }
 
+// Same labels as the renderer's ORDER_STATUSES (helpers.js), so the PDF
+// says "In Progress" rather than the stored "in_progress". Anything else
+// (an old free-text status) prints as stored.
+const STATUS_LABELS = {
+  pending: 'Pending',
+  in_progress: 'In Progress',
+  on_hold: 'On Hold',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+};
+
 function formatMoney(cents, currency) {
   const dollars = (cents ?? 0) / 100;
   try {
@@ -55,7 +66,7 @@ function buildOrderReceiptHtml({ order, person, platformAccount }) {
     <tr><td class="label">Client</td><td>${escapeHtml(person.private_label)}</td></tr>
     <tr><td class="label">Platform account</td><td>${accountLabel}</td></tr>
     <tr><td class="label">Amount</td><td>${formatMoney(order.amount_cents, order.currency)}</td></tr>
-    <tr><td class="label">Status</td><td>${escapeHtml(order.status)}</td></tr>
+    <tr><td class="label">Status</td><td>${escapeHtml(STATUS_LABELS[order.status] || order.status)}</td></tr>
     <tr><td class="label">Date paid</td><td>${escapeHtml(order.date_paid || '(not recorded)')}</td></tr>
     <tr><td class="label">Delivery due</td><td>${escapeHtml(deliveryDue)}</td></tr>
     <tr><td class="label">Payment method</td><td>${escapeHtml(order.payment_method || '(not recorded)')}</td></tr>

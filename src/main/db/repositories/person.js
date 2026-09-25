@@ -184,6 +184,14 @@ function mergeInto(loserId, survivorId) {
     // external_id column is.
     db.prepare('UPDATE person_external_links SET person_id = ? WHERE person_id = ?').run(survivorId, loserId);
 
+    // Shared-folder sync (0012_shared_sync.sql): if either side was being
+    // shared with collaborators, the merged client keeps being shared --
+    // otherwise merging a shared client into an unshared one silently
+    // drops it out of the next sync.
+    if (loser.is_shared && !survivor.is_shared) {
+      db.prepare('UPDATE persons SET is_shared = 1 WHERE id = ?').run(survivorId);
+    }
+
     if (loser.external_id) {
       if (!survivor.external_id) {
         // Survivor never had its own identity -- simplest case, it just

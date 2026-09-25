@@ -10,14 +10,24 @@ import { renderShell } from './views/shell.js';
 
 const root = document.getElementById('app');
 
+// Dialogs, the attachment lightbox and toasts are attached to <body>, not
+// #app, so swapping #app for the lock screen alone would leave any of them
+// open on top of it -- an order's screenshot or a list of client names
+// still showing after auto-lock. Cleared before the lock/setup screens.
+function clearOverlays() {
+  document.querySelectorAll('.modal-overlay, .lightbox, .toast-container').forEach((el) => el.remove());
+}
+
 async function boot() {
   const status = await window.api.vault.status();
 
   if (!status.initialized) {
+    clearOverlays();
     renderSetupView(root, { onComplete: boot });
     return;
   }
   if (!status.unlocked) {
+    clearOverlays();
     renderLockScreen(root, { status, onUnlocked: boot });
     return;
   }

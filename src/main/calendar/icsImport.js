@@ -111,7 +111,15 @@ function parseIcs(icsText) {
       if (current) {
         const start = parseDateField(current.dtstart);
         if (current.summary && start) {
-          const end = current.dtend ? parseDateField(current.dtend) : null;
+          let end = current.dtend ? parseDateField(current.dtend) : null;
+          // An all-day DTEND is the day *after* the event (RFC 5545), while
+          // SWA stores the event's last day -- step back one. A one-day
+          // event (DTEND = the next day) then needs no end at all.
+          if (end && start.allDay && end.allDay) {
+            const lastDay = new Date(end.iso);
+            lastDay.setDate(lastDay.getDate() - 1);
+            end = lastDay.getTime() > new Date(start.iso).getTime() ? { ...end, iso: lastDay.toISOString() } : null;
+          }
           items.push({
             title: unescapeIcsText(current.summary),
             notes: current.description ? unescapeIcsText(current.description) : '',

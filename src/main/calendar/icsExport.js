@@ -41,17 +41,15 @@ function formatIcsDateTime(isoUtc) {
 
 // All-day dates have no time/timezone component, so they need different
 // handling depending on what's being formatted:
-//  - A plain "YYYY-MM-DD" (order delivery_due_date) needs no conversion
-//    at all -- just strip the dashes.
+//  - A plain "YYYY-MM-DD" (order delivery_due_date) is read as that
+//    local calendar day.
 //  - A full ISO datetime representing local midnight (an all-day
 //    calendar_events row -- see fromDatetimeLocalValue in helpers.js)
 //    must use *local* date getters, not UTC ones, or the date could
 //    shift by a day depending on the timezone offset's sign.
-function formatIcsDateOnly(value) {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return value.replace(/-/g, '');
-  }
-  const d = new Date(value);
+function formatIcsDateOnly(value, addDays = 0) {
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : new Date(value);
+  d.setDate(d.getDate() + addDays);
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
 }
@@ -71,7 +69,10 @@ function buildIcs(items) {
 
     if (item.allDay) {
       lines.push(`DTSTART;VALUE=DATE:${formatIcsDateOnly(item.start)}`);
-      if (item.end) lines.push(`DTEND;VALUE=DATE:${formatIcsDateOnly(item.end)}`);
+      // SWA stores the last day of an all-day event (what the user picked);
+      // an .ics DTEND date is the day *after* it (RFC 5545, exclusive), or
+      // other calendars show the event a day short.
+      if (item.end) lines.push(`DTEND;VALUE=DATE:${formatIcsDateOnly(item.end, 1)}`);
     } else {
       lines.push(`DTSTART:${formatIcsDateTime(item.start)}`);
       if (item.end) lines.push(`DTEND:${formatIcsDateTime(item.end)}`);

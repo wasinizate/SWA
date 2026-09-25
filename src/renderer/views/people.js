@@ -3,8 +3,20 @@
 // deliberately differ), with inline "add" and a link into the detail
 // view (which handles their notes, platform accounts, and orders).
 
-import { escapeHtml, formatDateTime, formatMoney, daysSince, formatDaysSince, PRIORITY_OPTIONS, priorityBadgeHtml } from '../helpers.js';
+import {
+  escapeHtml,
+  formatDateTime,
+  formatMoney,
+  daysSince,
+  formatDaysSince,
+  PRIORITY_OPTIONS,
+  priorityBadgeHtml,
+  followUpDateInDays,
+  FOLLOW_UP_PRESETS,
+  ipcErrorMessage,
+} from '../helpers.js';
 import { openModal } from '../modal.js';
+import { showToast } from '../toast.js';
 import { renderImportPanel } from '../importPanel.js';
 import { openPersonLinkModal } from '../personLinkModal.js';
 
@@ -252,10 +264,19 @@ export function renderPeopleView(container, { navigate, quietOnly, focusAddForm,
           <td>${formatMoney(lifetimeSpendByPerson[p.id] || 0)}</td>
           <td class="${quiet ? 'quiet-client' : ''}">${formatDaysSince(days)}</td>
           <td>${formatDateTime(p.created_at)}</td>
-          <td><button class="danger btn-sm" data-delete="${p.id}">Delete</button></td>
+          <td>
+            <div class="row-actions row-actions-nowrap">
+              <button class="btn-secondary btn-sm" data-note="${p.id}">+ Note</button>
+              <button class="danger btn-sm" data-delete="${p.id}">Delete</button>
+            </div>
+          </td>
         </tr>`;
       })
       .join('');
+
+    rowsEl.querySelectorAll('[data-note]').forEach((btn) => {
+      btn.addEventListener('click', () => toggleQuickNote(btn));
+    });
 
     rowsEl.querySelectorAll('[data-open]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -263,7 +284,10 @@ export function renderPeopleView(container, { navigate, quietOnly, focusAddForm,
           openPersonLinkModal({
             personAId: linkingWithPersonId,
             personBId: Number(btn.dataset.open),
-            onResolved: (survivorId) => navigate('personDetail', { personId: survivorId || linkingWithPersonId }),
+            // replace: this pick-a-client list is a one-off step, not a
+            // page Back should return to.
+            onResolved: (survivorId) =>
+              navigate('personDetail', { personId: survivorId || linkingWithPersonId }, { replace: true }),
           });
           return;
         }
@@ -276,6 +300,60 @@ export function renderPeopleView(container, { navigate, quietOnly, focusAddForm,
         await window.api.person.delete(Number(btn.dataset.delete));
         refresh();
       });
+    });
+  }
+
+  // Log an Activity note (optionally with a follow-up) without opening the
+  // client's page. Opens as a one-line form directly under that client's
+  // row; only one is open at a time, and it closes after logging, on the
+  // x, on Escape, or by clicking "+ Note" again.
+  function toggleQuickNote(btn) {
+    const clientRow = btn.closest('tr');
+    const openRow = rowsEl.querySelector('.quick-note-row');
+    const wasOpenHere = openRow && openRow.previousElementSibling === clientRow;
+    if (openRow) openRow.remove();
+    if (wasOpenHere) return;
+
+    const person = allPeople.find((p) => p.id === Number(btn.dataset.note));
+    const noteRow = document.createElement('tr');
+    noteRow.className = 'quick-note-row';
+    noteRow.innerHTML = `
+      <td colspan="7">
+        <form class="inline-form quick-note-form">
+          <input type="text" class="quick-note-text" placeholder="Note for ${escapeHtml(person.private_label)}" required />
+          <select class="quick-note-follow-up">
+            <option value="">No follow-up</option>
+            ${FOLLOW_UP_PRESETS.map((p) => `<option value="${p.days}">Follow up in ${p.label}</option>`).join('')}
+          </select>
+          <button type="submit" class="btn-secondary">Log</button>
+          <button type="button" class="icon-button quick-note-cancel" aria-label="Cancel">&times;</button>
+        </form>
+      </td>
+    `;
+    clientRow.after(noteRow);
+
+    const form = noteRow.querySelector('form');
+    const textInput = noteRow.querySelector('.quick-note-text');
+    textInput.focus();
+
+    const close = () => noteRow.remove();
+    noteRow.querySelector('.quick-note-cancel').addEventListener('click', close);
+    form.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') close();
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const text = textInput.value.trim();
+      if (!text) return;
+      const days = noteRow.querySelector('.quick-note-follow-up').value;
+      await window.api.personInteraction.create(person.id, {
+        type: 'note',
+        text,
+        followUpDate: days ? followUpDateInDays(Number(days)) : null,
+      });
+      close();
+      showToast(days ? `Follow-up flagged for ${person.private_label}.` : `Note logged for ${person.private_label}.`);
     });
   }
 
@@ -318,7 +396,7 @@ export function renderPeopleView(container, { navigate, quietOnly, focusAddForm,
       input.value = '';
       refresh();
     } catch (err) {
-      errorEl.textContent = err.message;
+      errorEl.textContent = ipcErrorMessage(err);
       errorEl.hidden = false;
     }
   });
@@ -328,7 +406,7 @@ export function renderPeopleView(container, { navigate, quietOnly, focusAddForm,
   if (focusAddForm) container.querySelector('#private-label').focus();
 
   if (linkingWithPersonId) {
-    container.querySelector('#cancel-linking').addEventListener('click', () => navigate('personDetail', { personId: linkingWithPersonId }));
+    container.querySelector('#cancel-linking').addEventListener('click', () => navigate.back('personDetail', { personId: linkingWithPersonId }));
     window.api.person.get(linkingWithPersonId).then((origin) => {
       const label = container.querySelector('#linking-with-label');
       if (label && origin) label.textContent = origin.private_label;

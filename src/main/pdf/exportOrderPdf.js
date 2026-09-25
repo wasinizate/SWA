@@ -27,7 +27,8 @@ async function exportOrderPdf(orderId, parentWindow) {
   // has a page to render before printToPDF() captures it.
   const printWindow = new BrowserWindow({
     show: false,
-    webPreferences: { sandbox: true },
+    // No scripts needed to lay out a receipt, so none are allowed to run.
+    webPreferences: { sandbox: true, javascript: false },
   });
 
   try {

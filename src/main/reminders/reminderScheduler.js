@@ -12,6 +12,7 @@ const orderRepo = require('../db/repositories/order');
 const settingsRepo = require('../db/repositories/settings');
 
 const POLL_INTERVAL_MS = 60_000;
+const STALE_REMINDER_MS = 60 * 60 * 1000;
 
 let pollHandle = null;
 
@@ -42,7 +43,16 @@ function checkCalendarEventReminders(getMainWindow) {
   const now = Date.now();
 
   for (const event of pending) {
-    const dueAt = new Date(event.start_datetime).getTime() - event.reminder_minutes_before * 60_000;
+    const startsAt = new Date(event.start_datetime).getTime();
+    // Long past (an imported .ics full of old events, or one backdated by
+    // hand): retire the reminder quietly instead of a burst of popups
+    // about things that already happened. Within the first hour it still
+    // fires, in case the app just wasn't open at reminder time.
+    if (now > startsAt + STALE_REMINDER_MS) {
+      calendarEventRepo.markReminderFired(event.id);
+      continue;
+    }
+    const dueAt = startsAt - event.reminder_minutes_before * 60_000;
     if (now >= dueAt) {
       showNotification(event.title, event.notes || 'Upcoming calendar event', getMainWindow);
       calendarEventRepo.markReminderFired(event.id);
@@ -59,9 +69,15 @@ function checkOrderDueReminders(getMainWindow) {
 
   for (const order of orders) {
     if (order.due_reminder_notified_on === today) continue; // already notified today
+    // A finished order isn't due anymore. (listWithDeliveryDueDates() keeps
+    // completed orders for the Calendar, so without this every completed
+    // order with a past due date got a fresh notification every day.)
+    if (order.status === 'completed') continue;
 
-    const dueDate = new Date(`${order.delivery_due_date}T00:00:00`);
-    const reminderDate = new Date(dueDate.getTime() - daysBefore * 24 * 60 * 60 * 1000);
+    // Calendar-day arithmetic (setDate), not N x 24h, so a daylight-saving
+    // change in between can't push the reminder back a day.
+    const reminderDate = new Date(`${order.delivery_due_date}T00:00:00`);
+    reminderDate.setDate(reminderDate.getDate() - daysBefore);
     const todayDate = new Date(`${today}T00:00:00`);
 
     if (todayDate.getTime() >= reminderDate.getTime()) {

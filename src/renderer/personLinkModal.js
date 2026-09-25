@@ -14,7 +14,7 @@
 // about either client's own data, so it's low-stakes enough not to need
 // one).
 
-import { escapeHtml } from './helpers.js';
+import { escapeHtml, ipcErrorMessage } from './helpers.js';
 import { openModal } from './modal.js';
 import { showToast } from './toast.js';
 
@@ -57,7 +57,7 @@ export function openPersonLinkModal({ personAId, personBId, onResolved }) {
           showToast(`Linked "${personA.private_label}" and "${personB.private_label}".`);
           if (onResolved) onResolved(null);
         } catch (err) {
-          alert(`Failed to link: ${err.message}`);
+          alert(`Failed to link: ${ipcErrorMessage(err)}`);
         }
       });
 
@@ -76,7 +76,7 @@ export function openPersonLinkModal({ personAId, personBId, onResolved }) {
           showToast(`Merged. "${loserLabel}" is gone -- everything it had is now on "${survivorLabel}".`);
           if (onResolved) onResolved(survivorId);
         } catch (err) {
-          alert(`Failed to merge: ${err.message}`);
+          alert(`Failed to merge: ${ipcErrorMessage(err)}`);
         }
       }
     },

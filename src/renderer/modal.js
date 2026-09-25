@@ -5,12 +5,16 @@
 // dueDateSummary.js itself is left as-is (out of scope for this change);
 // this is for new call sites only.
 
+import { escapeHtml } from './helpers.js';
+
+// `title` is plain text (escaped here) -- some are user data, like a
+// calendar event's title, which can come from an imported .ics file.
 export function openModal({ title, wide = false, render }) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal${wide ? ' modal-wide' : ''}">
-      <h2>${title}</h2>
+      <h2>${escapeHtml(title)}</h2>
       <div id="modal-body"></div>
       <div class="form-actions">
         <button type="button" class="btn-secondary" id="modal-close-btn">Close</button>

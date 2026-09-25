@@ -27,23 +27,10 @@
 <body>
   <div id="app"></div>
   <!--
-    FullCalendar's "global" build -- a self-contained UMD bundle meant for
-    plain <script> tag use, no bundler needed (see calendar.js). Vendored
-    locally by scripts/copy-vendor-assets.js (an npm postinstall step)
-    rather than loaded from a CDN, keeping this fully offline. It's a
-    classic (non-module) script, so it runs synchronously here, before
-    app.js -- guaranteeing window.FullCalendar exists by the time any
-    module code needs it, since type="module" scripts always defer until
-    the document is parsed.
+    FullCalendar's scripts aren't loaded here -- the Calendar page loads
+    them on first open (see fullCalendarLoader.js), so app startup doesn't
+    pay to parse a bundle only one page uses.
   -->
-  <script src="vendor/fullcalendar/global.js"></script>
-  <!--
-    The "classic" theme plugin -- must load after global.js, since it
-    registers itself onto FullCalendar's shared plugin list (which
-    Calendar instances pick up automatically, no explicit `plugins:`
-    config needed -- see calendar.js).
-  -->
-  <script src="vendor/fullcalendar/theme-classic.js"></script>
   <script type="module" src="app.js"></script>
 </body>
 </html>

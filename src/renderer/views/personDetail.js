@@ -7,11 +7,10 @@
 //
 // Layout: a compact "id-card" at the top (name, priority/follow-up
 // flags, platforms, revenue, preference tags) for the at-a-glance view,
-// with everything else -- Orders, Activity, Notes, Platform accounts,
-// Priority & sharing, Linked clients, Content matches -- as collapsible
-// <details> sections below it instead of a long stack of always-expanded
-// cards. Nothing was removed in that reshuffle, only reprioritized:
-// Orders starts open since that's usually what you came for.
+// with everything else -- Orders, Spending, Activity, Notes, Platform
+// accounts, Priority & sharing, Linked clients, Content matches -- as
+// collapsible <details> sections below it. Orders starts open since
+// that's usually what you came for.
 
 import {
   escapeHtml,
@@ -23,11 +22,13 @@ import {
   daysSince,
   formatDaysSince,
   formatDateTime,
-  toDateInputValue,
+  followUpDateInDays,
+  FOLLOW_UP_PRESETS,
   hashHue,
   INTERACTION_TYPE_OPTIONS,
   interactionTypeLabel,
   needsPaymentDateBeforeClosing,
+  ipcErrorMessage,
 } from '../helpers.js';
 import { promptForPassphrase } from '../exportPassphrasePrompt.js';
 import { showToast } from '../toast.js';
@@ -44,16 +45,36 @@ function getInitials(label) {
 }
 
 export function renderPersonDetailView(container, { navigate, personId }) {
+  const setTitle = navigate.titleSetter();
   container.innerHTML = loadingHtml();
   load();
 
   async function load() {
-    const person = await window.api.person.get(personId);
+    // Everything the page shows, fetched in one parallel batch so the
+    // whole page paints at once instead of filling in section by section.
+    const [person, tags, allTags, accounts, orders, valueSummary, platformRevenue, totals, interactions, links, matches] =
+      await Promise.all([
+        window.api.person.get(personId),
+        window.api.tag.listForPerson(personId),
+        window.api.tag.listAll(),
+        window.api.platformAccount.listByPerson(personId),
+        window.api.order.listByPerson(personId),
+        window.api.order.getClientValueSummary(personId),
+        window.api.order.getRevenueByPlatformForPerson(personId),
+        window.api.order.getTotalsByPerson(personId),
+        window.api.personInteraction.listForPerson(personId),
+        window.api.personLink.listForPerson(personId),
+        window.api.contentItem.listMatchingPersonInterests(personId),
+      ]);
+
+    // Deleted or merged away since the link to it was made (e.g. Back
+    // after a merge) -- skip past it rather than dead-ending here.
     if (!person) {
-      container.innerHTML = '<p>Client not found.</p><button id="back" type="button">Back to Clients</button>';
-      container.querySelector('#back').addEventListener('click', () => navigate('people'));
+      showToast('That client no longer exists.');
+      navigate.back('people');
       return;
     }
+    setTitle(person.private_label);
 
     // Feeds the sidebar's "Recently viewed" list (see shell.js). Not
     // awaited by load() itself -- this page's own render never waits on
@@ -68,42 +89,44 @@ export function renderPersonDetailView(container, { navigate, personId }) {
     let earliestOpenFollowUp = null;
     let currentTags = [];
     let allTagLabels = [];
+    let latestTotals = totals;
 
     container.innerHTML = `
-      <button class="link-button" id="back" type="button">&larr; Back to Clients</button>
+      <button class="link-button" id="back" type="button">&larr; Back to ${escapeHtml(navigate.backLabel('Clients'))}</button>
 
       <div class="id-card">
         <div class="id-top">
           <div class="id-avatar">${escapeHtml(getInitials(person.private_label))}</div>
           <div class="id-name-block">
+            <div class="dex-number">No. ${String(person.id).padStart(3, '0')}</div>
             <div class="id-name">
               <span>${escapeHtml(person.private_label)}</span>
               <span id="id-flags"></span>
               <button type="button" class="icon-button" id="link-client-btn" title="Link or merge with another client">🔗</button>
             </div>
-            <div class="id-platforms" id="platform-badges">${loadingHtml()}</div>
+            <div class="id-platforms" id="platform-badges"></div>
           </div>
         </div>
 
         <div class="stat-row">
-          <div class="stat">
+          <div class="stat" title="Paid orders only. Cancelled orders and orders without a payment date don't count.">
             <div class="stat-label">Total revenue</div>
-            <div class="stat-value" id="id-total-revenue">${loadingHtml()}</div>
+            <div class="stat-value" id="id-total-revenue"></div>
           </div>
           <div class="stat">
             <div class="stat-label">Orders pending</div>
-            <div class="stat-value" id="id-orders-pending">${loadingHtml()}</div>
+            <div class="stat-value" id="id-orders-pending"></div>
           </div>
           <div class="stat">
             <div class="stat-label">Last purchase</div>
-            <div class="stat-value" id="id-last-purchase">${loadingHtml()}</div>
+            <div class="stat-value" id="id-last-purchase"></div>
           </div>
         </div>
 
         <div class="section-label">${new Date().getFullYear()} revenue by platform</div>
-        <div class="platform-revenue" id="revenue-chips">${loadingHtml()}</div>
+        <div class="platform-revenue" id="revenue-chips"></div>
 
-        <div class="tag-row tag-row-spaced" id="tag-row">${loadingHtml()}</div>
+        <div class="tag-row tag-row-spaced" id="tag-row"></div>
 
         <div class="id-actions">
           <button type="button" id="new-order">+ New order</button>
@@ -119,33 +142,29 @@ export function renderPersonDetailView(container, { navigate, personId }) {
           <span class="detail-meta"><span id="orders-meta"></span><span class="detail-chevron">&#9656;</span></span>
         </summary>
         <div class="detail-body">
-          <div class="income-summary-grid" id="client-value-body">${loadingHtml()}</div>
-          <p class="hint">Excludes cancelled orders and orders without a recorded payment date -- same rule as the totals below.</p>
+          <table class="data-table">
+            <thead><tr><th>#</th><th>Date paid</th><th>Amount</th><th>Status</th></tr></thead>
+            <tbody id="order-rows"></tbody>
+          </table>
+        </div>
+      </details>
 
-          <div class="section-header">
-            <h3>Order history</h3>
-            <div class="row-actions">
-              <button type="button" class="btn-secondary" id="export-client">Export client</button>
-            </div>
-          </div>
-
+      <details class="detail">
+        <summary class="detail-head">
+          <h2>Spending</h2>
+          <span class="detail-meta"><span id="spending-meta"></span><span class="detail-chevron">&#9656;</span></span>
+        </summary>
+        <div class="detail-body">
+          <div class="income-summary-grid" id="client-value-body"></div>
           <div class="totals-card">
             <div class="totals-header">
-              <h3>Client totals</h3>
               <div class="totals-toggle">
-                <button type="button" class="totals-tab active" data-period="all">All time</button>
-                <button type="button" class="totals-tab" data-period="year">By year</button>
+                <button type="button" class="totals-tab active" data-period="year">By year</button>
                 <button type="button" class="totals-tab" data-period="month">By month</button>
               </div>
             </div>
-            <div id="totals-body">${loadingHtml()}</div>
-            <p class="hint">Excludes cancelled orders and orders without a recorded payment date.</p>
+            <div id="totals-body"></div>
           </div>
-
-          <table class="data-table">
-            <thead><tr><th>#</th><th>Date paid</th><th>Amount</th><th>Status</th></tr></thead>
-            <tbody id="order-rows"><tr><td colspan="4" class="loading-state">Loading…</td></tr></tbody>
-          </table>
         </div>
       </details>
 
@@ -195,6 +214,7 @@ export function renderPersonDetailView(container, { navigate, personId }) {
           <form id="account-form" class="inline-form">
             <input type="text" id="platform-name" placeholder="Platform (e.g. OnlyFans)" required />
             <input type="text" id="username" placeholder="Username / handle" required />
+            <input type="text" id="profile-url" placeholder="Profile link (optional)" hidden />
             <label class="checkbox-label"><input type="checkbox" id="verified" /> Verified</label>
             <button type="submit">Add account</button>
           </form>
@@ -221,6 +241,9 @@ export function renderPersonDetailView(container, { navigate, personId }) {
             <input type="checkbox" id="person-shared" ${person.is_shared ? 'checked' : ''} />
             Shared with collaborators -- syncs (all of their orders) via the shared folder configured in Settings
           </label>
+          <div class="form-actions">
+            <button type="button" class="btn-secondary" id="export-client">Export client</button>
+          </div>
         </div>
       </details>
 
@@ -245,12 +268,12 @@ export function renderPersonDetailView(container, { navigate, personId }) {
         </summary>
         <div class="detail-body">
           <p class="hint">Content library items sharing a tag with this client, that they haven't already been sold -- a quick upsell prompt built off the same tags above.</p>
-          <div id="content-matches-body">${loadingHtml()}</div>
+          <div id="content-matches-body"></div>
         </div>
       </details>
     `;
 
-    container.querySelector('#back').addEventListener('click', () => navigate('people'));
+    container.querySelector('#back').addEventListener('click', () => navigate.back('people'));
 
     // ---- id-card flags (priority badge + open-follow-up flag) -----------
 
@@ -288,7 +311,10 @@ export function renderPersonDetailView(container, { navigate, personId }) {
     });
 
     async function refreshPersonLinks() {
-      const links = await window.api.personLink.listForPerson(personId);
+      renderPersonLinks(await window.api.personLink.listForPerson(personId));
+    }
+
+    function renderPersonLinks(links) {
       const body = container.querySelector('#person-links-body');
       container.querySelector('#links-meta').textContent = links.length ? `${links.length} linked` : '';
 
@@ -318,7 +344,9 @@ export function renderPersonDetailView(container, { navigate, personId }) {
           openPersonLinkModal({
             personAId: personId,
             personBId: Number(btn.dataset.mergeLinked),
-            onResolved: (survivorId) => navigate('personDetail', { personId: survivorId || personId }),
+            // replace: if this client was merged away, Back shouldn't lead
+            // to its now-deleted page.
+            onResolved: (survivorId) => navigate('personDetail', { personId: survivorId || personId }, { replace: true }),
           });
         });
       });
@@ -343,10 +371,11 @@ export function renderPersonDetailView(container, { navigate, personId }) {
     // Reuses the same tag system as everywhere else in the app (Content
     // matches below is driven by these same tags). Remove/rename here are
     // scoped to *this client's* association only: rename swaps this
-    // person's tag for a new (or reused) one via remove+add, it never
-    // calls tag.rename() (which renames the shared tag row everywhere
-    // it's used -- that stays a deliberate action in Settings, not
-    // something a stray double-click here should trigger).
+    // person's tag for a new (or reused) one via remove+add rather than
+    // tag.rename() (which renames the shared tag row everywhere it's used
+    // -- a deliberate action in Settings, not something a stray
+    // double-click here should trigger). The one exception is a
+    // case-only fix ("feet" -> "Feet"), which is the same tag either way.
 
     function renderTagRow() {
       const row = container.querySelector('#tag-row');
@@ -386,6 +415,12 @@ export function renderPersonDetailView(container, { navigate, personId }) {
             if (value && value.toLowerCase() !== tag.label.toLowerCase()) {
               await window.api.tag.removeFromPerson(personId, tagId);
               await window.api.tag.addToPerson(personId, value);
+            } else if (value && value !== tag.label) {
+              // Case-only edit ("feet" -> "Feet"): tags match
+              // case-insensitively, so it's the same shared tag with its
+              // spelling fixed -- rename it rather than silently ignoring
+              // the edit.
+              await window.api.tag.rename(tagId, value);
             }
             await refreshTags();
           };
@@ -431,16 +466,25 @@ export function renderPersonDetailView(container, { navigate, personId }) {
       });
     }
 
+    // Content matches are driven by these same tags, so they refresh
+    // together.
     async function refreshTags() {
-      const [tags, allTags] = await Promise.all([window.api.tag.listForPerson(personId), window.api.tag.listAll()]);
-      currentTags = tags;
-      allTagLabels = allTags.map((t) => t.label);
-      renderTagRow();
-      await refreshContentMatches();
+      const [tagList, allTagList, matchList] = await Promise.all([
+        window.api.tag.listForPerson(personId),
+        window.api.tag.listAll(),
+        window.api.contentItem.listMatchingPersonInterests(personId),
+      ]);
+      applyTags(tagList, allTagList);
+      renderContentMatches(matchList);
     }
 
-    async function refreshContentMatches() {
-      const matches = await window.api.contentItem.listMatchingPersonInterests(personId);
+    function applyTags(tagList, allTagList) {
+      currentTags = tagList;
+      allTagLabels = allTagList.map((t) => t.label);
+      renderTagRow();
+    }
+
+    function renderContentMatches(matches) {
       const body = container.querySelector('#content-matches-body');
       container.querySelector('#matches-meta').textContent = matches.length ? `${matches.length} matches` : '';
 
@@ -495,18 +539,41 @@ export function renderPersonDetailView(container, { navigate, personId }) {
         if (!proceed) return;
       }
 
-      await window.api.platformAccount.create({
-        personId,
-        platformName,
-        username,
-        verified: container.querySelector('#verified').checked,
-      });
+      try {
+        await window.api.platformAccount.create({
+          personId,
+          platformName,
+          username,
+          verified: container.querySelector('#verified').checked,
+          profileUrl: profileUrlInput.hidden ? '' : profileUrlInput.value,
+        });
+      } catch (err) {
+        showToast(ipcErrorMessage(err));
+        return;
+      }
       container.querySelector('#account-form').reset();
+      profileUrlInput.hidden = true;
       await refreshAccounts();
     });
 
+    // The profile link field only appears for platforms the app can't link
+    // to on its own (see src/main/platformLinks.js) -- typing "OnlyFans"
+    // never shows it.
+    const profileUrlInput = container.querySelector('#profile-url');
+    let platformCheckTimer = null;
+    container.querySelector('#platform-name').addEventListener('input', (event) => {
+      clearTimeout(platformCheckTimer);
+      const name = event.target.value.trim();
+      platformCheckTimer = setTimeout(async () => {
+        profileUrlInput.hidden = !name || (await window.api.platformAccount.isKnownPlatform(name));
+      }, 250);
+    });
+
     async function refreshAccounts() {
-      const accounts = await window.api.platformAccount.listByPerson(personId);
+      renderAccounts(await window.api.platformAccount.listByPerson(personId));
+    }
+
+    function renderAccounts(accounts) {
       const rows = container.querySelector('#account-rows');
       container.querySelector('#accounts-meta').textContent = accounts.length ? `${accounts.length} linked` : '';
 
@@ -514,39 +581,123 @@ export function renderPersonDetailView(container, { navigate, personId }) {
         accounts.length === 0
           ? '<tr><td colspan="4" class="muted">No platform accounts yet.</td></tr>'
           : accounts
-              .map(
-                (a) => `
+              .map((a) => {
+                // Known platforms link automatically, so only accounts
+                // without a link (or with a custom one) get a link button.
+                const linkAction = a.profile_url ? 'Edit link' : a.has_profile_link ? '' : 'Add link';
+                return `
               <tr>
                 <td>${escapeHtml(a.platform_name)}</td>
-                <td>${escapeHtml(a.username)}</td>
+                <td>${
+                  a.has_profile_link
+                    ? `<button type="button" class="link-button" data-open-profile="${a.id}">${escapeHtml(a.username)} ↗</button>`
+                    : escapeHtml(a.username)
+                }</td>
                 <td>${a.verified ? 'Yes' : 'No'}</td>
-                <td><button class="danger btn-sm" data-delete-account="${a.id}">Delete</button></td>
-              </tr>`
-              )
+                <td>
+                  <div class="row-actions row-actions-nowrap">
+                    ${linkAction ? `<button type="button" class="btn-secondary btn-sm" data-edit-link="${a.id}">${linkAction}</button>` : ''}
+                    <button class="danger btn-sm" data-delete-account="${a.id}">Delete</button>
+                  </div>
+                </td>
+              </tr>`;
+              })
               .join('');
 
       rows.querySelectorAll('[data-delete-account]').forEach((btn) => {
         btn.addEventListener('click', async () => {
           if (!confirm('Delete this platform account? Linked orders are kept but unlinked.')) return;
           await window.api.platformAccount.delete(Number(btn.dataset.deleteAccount));
-          await refreshAccounts();
-          await refreshOrders();
+          await Promise.all([refreshAccounts(), refreshMoney()]);
         });
       });
 
-      // id-card platform badges -- deduped by name (a client can have two
-      // accounts on the same platform), colored the same way the revenue
-      // chips below are so "OnlyFans" reads as one consistent color
-      // across the card. Read-only here on purpose -- deleting a platform
-      // account unlinks its orders, a bigger consequence than a stray
-      // click on this card should trigger; the real delete stays in the
-      // table just above.
-      const uniquePlatforms = [...new Set(accounts.map((a) => a.platform_name))];
-      container.querySelector('#platform-badges').innerHTML = uniquePlatforms.length
-        ? uniquePlatforms
-            .map((name) => `<span class="platform-badge chip-color" style="--hue: ${hashHue(name)}">${escapeHtml(name)}</span>`)
+      rows.querySelectorAll('[data-edit-link]').forEach((btn) => {
+        btn.addEventListener('click', () => toggleLinkEditor(btn, accounts.find((a) => a.id === Number(btn.dataset.editLink))));
+      });
+
+      // id-card platform badges, colored the same way the revenue chips
+      // are so "OnlyFans" reads as one color across the card. One badge
+      // per platform, unless a client has two accounts on the same one --
+      // then each gets its own, labeled with its username, so each opens
+      // the right profile. Linkable badges open the profile in the
+      // browser; deleting an account stays in the table below.
+      const perPlatform = {};
+      for (const a of accounts) perPlatform[a.platform_name.toLowerCase()] = (perPlatform[a.platform_name.toLowerCase()] || 0) + 1;
+      const seen = new Set();
+      const badges = accounts.filter((a) => {
+        const key = a.platform_name.toLowerCase();
+        if (perPlatform[key] > 1) return true;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      container.querySelector('#platform-badges').innerHTML = badges.length
+        ? badges
+            .map((a) => {
+              const label = perPlatform[a.platform_name.toLowerCase()] > 1 ? `${a.platform_name} · ${a.username}` : a.platform_name;
+              const style = `style="--hue: ${hashHue(a.platform_name)}"`;
+              return a.has_profile_link
+                ? `<button type="button" class="platform-badge chip-color platform-badge-link" ${style} data-open-profile="${a.id}" title="Open ${escapeHtml(a.username)} on ${escapeHtml(a.platform_name)}">${escapeHtml(label)}<span class="badge-arrow" aria-hidden="true">↗</span></button>`
+                : `<span class="platform-badge chip-color" ${style}>${escapeHtml(label)}</span>`;
+            })
             .join('')
         : '<span class="muted">No platforms yet</span>';
+
+      container.querySelectorAll('[data-open-profile]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          try {
+            await window.api.platformAccount.openProfile(Number(btn.dataset.openProfile));
+          } catch (err) {
+            showToast("Couldn't open that profile.");
+          }
+        });
+      });
+    }
+
+    // One-line link editor under an account's row -- same open/close
+    // pattern as the Clients list's "+ Note". Saving an empty link clears it.
+    function toggleLinkEditor(btn, account) {
+      const accountRow = btn.closest('tr');
+      const openRow = container.querySelector('.link-editor-row');
+      const wasOpenHere = openRow && openRow.previousElementSibling === accountRow;
+      if (openRow) openRow.remove();
+      if (wasOpenHere) return;
+
+      const editorRow = document.createElement('tr');
+      editorRow.className = 'quick-note-row link-editor-row';
+      editorRow.innerHTML = `
+        <td colspan="4">
+          <form class="inline-form quick-note-form">
+            <input type="text" class="quick-note-text" placeholder="Profile link, e.g. https://example.com/${escapeHtml(account.username)}" value="${escapeHtml(account.profile_url || '')}" />
+            <button type="submit" class="btn-secondary">Save</button>
+            <button type="button" class="icon-button link-editor-cancel" aria-label="Cancel">&times;</button>
+          </form>
+          <p class="error" hidden></p>
+        </td>
+      `;
+      accountRow.after(editorRow);
+      const input = editorRow.querySelector('input');
+      input.focus();
+
+      const close = () => editorRow.remove();
+      editorRow.querySelector('.link-editor-cancel').addEventListener('click', close);
+      editorRow.querySelector('form').addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') close();
+      });
+      editorRow.querySelector('form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const errorEl = editorRow.querySelector('.error');
+        try {
+          await window.api.platformAccount.update(account.id, { profileUrl: input.value });
+          await refreshAccounts();
+          showToast(input.value.trim() ? 'Profile link saved.' : 'Profile link removed.');
+        } catch (err) {
+          errorEl.textContent = ipcErrorMessage(err);
+          errorEl.hidden = false;
+        }
+      });
     }
 
     // "New order" creates a blank order immediately and drops you onto
@@ -575,29 +726,42 @@ export function renderPersonDetailView(container, { navigate, personId }) {
         const savedPath = await window.api.dataExchange.exportPerson(personId, passphrase);
         if (savedPath) showToast(`Saved to: ${savedPath}`);
       } catch (err) {
-        alert(`Failed to export: ${err.message}`);
+        alert(`Failed to export: ${ipcErrorMessage(err)}`);
       }
     });
 
-    // ---- Client value (see order.js's getClientValueSummary()) -------
-    // "Decide in a few seconds how much attention this client deserves"
-    // -- lifetime spend, two rolling windows, order count, average order
-    // value, and last purchase date. Also feeds the id-card's "Total
-    // revenue"/"Last purchase" stats up top from this same fetch.
+    // ---- Money: id-card stats, Spending section, orders --------------
+    // Lifetime spend and last purchase live on the id-card only; the
+    // Spending section holds what the card doesn't (rolling windows,
+    // average, and the year/month breakdown), so no figure appears twice.
+    // Everything here comes from paid, non-cancelled orders (see
+    // order.js's getClientValueSummary()) -- the rule is spelled out in
+    // the "Total revenue" stat's tooltip rather than in on-page text.
 
-    async function refreshClientValue() {
-      const summary = await window.api.order.getClientValueSummary(personId);
-      const body = container.querySelector('#client-value-body');
+    // Every money figure on the page can change together (a status
+    // change, a new payment date, an account deleted), so they refresh
+    // as one parallel batch.
+    async function refreshMoney() {
+      const [orderList, summary, platformRows, totalsData] = await Promise.all([
+        window.api.order.listByPerson(personId),
+        window.api.order.getClientValueSummary(personId),
+        window.api.order.getRevenueByPlatformForPerson(personId),
+        window.api.order.getTotalsByPerson(personId),
+      ]);
+      renderOrders(orderList);
+      renderClientValue(summary);
+      renderPlatformRevenue(platformRows);
+      latestTotals = totalsData;
+      renderTotals();
+    }
+
+    function renderClientValue(summary) {
       const days = daysSince(summary.lastPurchaseDate);
-
       container.querySelector('#id-total-revenue').textContent = formatMoney(summary.lifetimeCents);
       container.querySelector('#id-last-purchase').textContent = summary.lastPurchaseDate ? formatDaysSince(days) : 'Never';
+      container.querySelector('#spending-meta').textContent = summary.last30Cents > 0 ? `${formatMoney(summary.last30Cents)} last 30 days` : '';
 
-      body.innerHTML = `
-        <div class="income-stat">
-          <div class="income-stat-label">Lifetime spend</div>
-          <div class="income-stat-value">${formatMoney(summary.lifetimeCents)}</div>
-        </div>
+      container.querySelector('#client-value-body').innerHTML = `
         <div class="income-stat">
           <div class="income-stat-label">Last 30 days</div>
           <div class="income-stat-value">${formatMoney(summary.last30Cents)}</div>
@@ -607,26 +771,19 @@ export function renderPersonDetailView(container, { navigate, personId }) {
           <div class="income-stat-value">${formatMoney(summary.last90Cents)}</div>
         </div>
         <div class="income-stat">
-          <div class="income-stat-label">Orders</div>
+          <div class="income-stat-label">Paid orders</div>
           <div class="income-stat-value">${summary.orderCount}</div>
         </div>
         <div class="income-stat">
           <div class="income-stat-label">Average order</div>
           <div class="income-stat-value">${formatMoney(summary.averageOrderCents)}</div>
         </div>
-        <div class="income-stat">
-          <div class="income-stat-label">Last purchase</div>
-          <div class="income-stat-value">${summary.lastPurchaseDate ? formatDaysSince(days) : 'Never'}</div>
-        </div>
       `;
     }
 
     // id-card's per-platform breakdown, current calendar year only -- see
-    // order.js's getRevenueByPlatformForPerson(). A separate, smaller
-    // query than Client value above (which is lifetime/rolling-window,
-    // not split by platform), so it's its own fetch.
-    async function refreshPlatformRevenue() {
-      const rows = await window.api.order.getRevenueByPlatformForPerson(personId);
+    // order.js's getRevenueByPlatformForPerson().
+    function renderPlatformRevenue(rows) {
       const listEl = container.querySelector('#revenue-chips');
       listEl.innerHTML = rows.length
         ? rows
@@ -638,20 +795,11 @@ export function renderPersonDetailView(container, { navigate, personId }) {
         : '<span class="muted">No paid orders this year</span>';
     }
 
-    // ---- Totals ---------------------------------------------------------
+    let totalsPeriod = 'year';
 
-    let totalsPeriod = 'all';
-
-    async function refreshTotals() {
-      const totals = await window.api.order.getTotalsByPerson(personId);
+    function renderTotals() {
       const body = container.querySelector('#totals-body');
-
-      if (totalsPeriod === 'all') {
-        body.innerHTML = `<p class="totals-all-time">${formatMoney(totals.allTimeCents)}</p>`;
-        return;
-      }
-
-      const rows = totalsPeriod === 'year' ? totals.byYear : totals.byMonth;
+      const rows = totalsPeriod === 'year' ? latestTotals.byYear : latestTotals.byMonth;
       const columnLabel = totalsPeriod === 'year' ? 'Year' : 'Month';
       body.innerHTML = rows.length
         ? `<table class="data-table"><thead><tr><th>${columnLabel}</th><th>Total</th></tr></thead><tbody>${rows
@@ -664,7 +812,7 @@ export function renderPersonDetailView(container, { navigate, personId }) {
       tab.addEventListener('click', () => {
         totalsPeriod = tab.dataset.period;
         container.querySelectorAll('.totals-tab').forEach((t) => t.classList.toggle('active', t === tab));
-        refreshTotals();
+        renderTotals();
       });
     });
 
@@ -701,9 +849,7 @@ export function renderPersonDetailView(container, { navigate, personId }) {
       followUpWrap.innerHTML = `
         <form id="quick-follow-up-form" class="inline-form">
           <select id="quick-follow-up-preset">
-            <option value="1">1 day</option>
-            <option value="3">3 days</option>
-            <option value="7">1 week</option>
+            ${FOLLOW_UP_PRESETS.map((p) => `<option value="${p.days}">${p.label}</option>`).join('')}
           </select>
           <input type="text" id="quick-follow-up-note" placeholder="Quick note (optional)" />
           <button type="submit" class="btn-secondary">Flag</button>
@@ -721,13 +867,10 @@ export function renderPersonDetailView(container, { navigate, personId }) {
       followUpWrap.querySelector('#quick-follow-up-form').addEventListener('submit', async (event) => {
         event.preventDefault();
         const presetDays = Number(followUpWrap.querySelector('#quick-follow-up-preset').value);
-        const target = new Date();
-        target.setDate(target.getDate() + presetDays);
-
         await window.api.personInteraction.create(personId, {
           type: 'note',
           text: noteInput.value.trim() || 'Follow up',
-          followUpDate: toDateInputValue(target.toISOString()),
+          followUpDate: followUpDateInDays(presetDays),
         });
         await refreshInteractions();
         showToast('Follow-up flagged.');
@@ -752,7 +895,10 @@ export function renderPersonDetailView(container, { navigate, personId }) {
     });
 
     async function refreshInteractions() {
-      const interactions = await window.api.personInteraction.listForPerson(personId);
+      renderInteractions(await window.api.personInteraction.listForPerson(personId));
+    }
+
+    function renderInteractions(interactions) {
       const listEl = container.querySelector('#interaction-list');
       container.querySelector('#activity-meta').textContent = interactions.length ? `${interactions.length} logged` : '';
 
@@ -802,8 +948,7 @@ export function renderPersonDetailView(container, { navigate, personId }) {
       });
     }
 
-    async function refreshOrders() {
-      const orders = await window.api.order.listByPerson(personId);
+    function renderOrders(orders) {
       // "Placed" order, newest first -- date_paid is NULL for anything
       // not yet paid, which would otherwise bury pending orders.
       orders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -846,33 +991,28 @@ export function renderPersonDetailView(container, { navigate, personId }) {
               order,
               onClose: async (datePaid) => {
                 await window.api.order.update(order.id, { status: 'completed', datePaid });
-                await refreshOrders();
-                await refreshTotals();
-                await refreshClientValue();
-                await refreshPlatformRevenue();
+                await refreshMoney();
               },
             });
             return;
           }
 
           await window.api.order.update(order.id, { status: newStatus });
-          await refreshOrders();
-          await refreshTotals();
-          await refreshClientValue();
-          await refreshPlatformRevenue();
+          await refreshMoney();
         });
       });
     }
 
-    // ---- Initial data load ------------------------------------------------
+    // ---- Initial render, straight from the batch fetched above -----------
 
-    await refreshTags();
-    await refreshAccounts();
-    await refreshOrders();
-    await refreshTotals();
-    await refreshClientValue();
-    await refreshPlatformRevenue();
-    await refreshInteractions();
-    await refreshPersonLinks();
+    applyTags(tags, allTags);
+    renderContentMatches(matches);
+    renderAccounts(accounts);
+    renderOrders(orders);
+    renderClientValue(valueSummary);
+    renderPlatformRevenue(platformRevenue);
+    renderTotals();
+    renderInteractions(interactions);
+    renderPersonLinks(links);
   }
 }

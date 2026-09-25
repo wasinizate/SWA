@@ -4,6 +4,7 @@
 // raw SQL for it.
 
 const { getDb } = require('../connection');
+const { normalizeProfileUrl } = require('../../platformLinks');
 
 function listByPerson(personId) {
   return getDb()
@@ -39,26 +40,37 @@ function findByPlatformAndUsername(platformName, username, { excludePersonId } =
   return excludePersonId ? rows.filter((r) => r.person_id !== excludePersonId) : rows;
 }
 
-function create({ personId, platformName, username, verified = false }) {
+// '' clears the link; anything else must be (or normalize to) an https://
+// URL -- this value is later handed to the OS to open (see
+// platformLinks.js), so nothing else is ever stored.
+function cleanProfileUrl(profileUrl) {
+  if (!profileUrl || !String(profileUrl).trim()) return '';
+  const normalized = normalizeProfileUrl(profileUrl);
+  if (!normalized) throw new Error('Profile link must be a web address, like https://example.com/name');
+  return normalized;
+}
+
+function create({ personId, platformName, username, verified = false, profileUrl = '' }) {
   if (!platformName || !platformName.trim()) throw new Error('platformName is required.');
   if (!username || !username.trim()) throw new Error('username is required.');
 
   const result = getDb()
-    .prepare('INSERT INTO platform_accounts (person_id, platform_name, username, verified) VALUES (?, ?, ?, ?)')
-    .run(personId, platformName.trim(), username.trim(), verified ? 1 : 0);
+    .prepare('INSERT INTO platform_accounts (person_id, platform_name, username, verified, profile_url) VALUES (?, ?, ?, ?, ?)')
+    .run(personId, platformName.trim(), username.trim(), verified ? 1 : 0, cleanProfileUrl(profileUrl));
   return get(result.lastInsertRowid);
 }
 
-function update(id, { platformName, username, verified }) {
+function update(id, { platformName, username, verified, profileUrl }) {
   const existing = get(id);
   if (!existing) throw new Error(`Platform account ${id} not found.`);
 
   getDb()
-    .prepare('UPDATE platform_accounts SET platform_name = ?, username = ?, verified = ? WHERE id = ?')
+    .prepare('UPDATE platform_accounts SET platform_name = ?, username = ?, verified = ?, profile_url = ? WHERE id = ?')
     .run(
       platformName !== undefined ? platformName.trim() : existing.platform_name,
       username !== undefined ? username.trim() : existing.username,
       verified !== undefined ? (verified ? 1 : 0) : existing.verified,
+      profileUrl !== undefined ? cleanProfileUrl(profileUrl) : existing.profile_url,
       id
     );
   return get(id);

@@ -29,6 +29,11 @@ A "/" command palette in the search bar (Ctrl+K/Cmd+K from anywhere) --
 /reminder, /add-event, and a jump-to shortcut for every page
 A sortable, recently-viewed-aware Clients list, so "who deserves my
 attention right now" is a glance, not a re-search
+One-click profile links: click a platform badge on a client's card to
+open their profile in your own browser
+Automatic daily encrypted backups to a folder you choose, with a
+Dashboard reminder when it's been a while
+Five color themes, including a Pokédex one
 
 Very few tools address these specific needs. Existing options are usually built for agencies or repurposed from something else. This one is designed from the ground up to keep your work organized, private, and manageable.
 
@@ -213,7 +218,16 @@ stored as integer cents to avoid floating-point rounding errors).
   currently in the vault (not a merge), so it requires re-entering your
   passphrase to confirm and always keeps an untouched, never-auto-deleted
   copy of the pre-restore data alongside `data.db` first, in case the
-  restore itself was a mistake.
+  restore itself was a mistake. Automatic backups (opt-in, same card)
+  save that same encrypted copy once a day to a folder you pick and keep
+  the most recent few (7 by default), deleting only their own older
+  copies (see [`src/main/backup/autoBackup.js`](src/main/backup/autoBackup.js)).
+- Clicking a platform badge on a client's card opens that account's
+  profile in your **default browser** — SWA itself sends nothing; it
+  hands the OS one `https://` address, either built from a fixed
+  per-platform template or a link you typed for that account (see
+  [`src/main/platformLinks.js`](src/main/platformLinks.js)). Nothing but
+  `https://` addresses is ever opened this way.
 - Settings → "Recovery phrase" can generate 6 random words (from the
   standard BIP-39 word list) that let you back into the vault if you
   forget your passphrase — shown once, never stored anywhere in
@@ -278,7 +292,8 @@ stored as integer cents to avoid floating-point rounding errors).
   ciphertext.
 - Data being exposed via clipboard/cloud-sync tools you might have
   running, since nothing is written outside the app's own local data
-  folder.
+  folder unless you choose a place for it (a backup, an export, the
+  shared-sync folder) -- and every one of those files is encrypted.
 - The app ever making a network request you didn't explicitly opt into
   — "Network access" (Settings → Privacy) is locked by default, and
   every network-capable feature is required to check it before making a
@@ -309,6 +324,15 @@ stored as integer cents to avoid floating-point rounding errors).
   therefore this project's software, is running on your network at that
   moment — no client data is sent, but that request itself is metadata.
   It only ever fires when you click the button.
+- Opening a **profile link**: your browser visits that platform like any
+  other page (the platform sees the visit, and it lands in your browser
+  history). SWA makes no request itself, so the Network access toggle
+  doesn't apply -- same as the "open release page" link after an update
+  check.
+- **Automatic backups** into a cloud-synced folder (Dropbox, OneDrive,
+  etc.): the copies are encrypted with your vault passphrase, but they
+  do leave this device through that service, so a weak passphrase
+  matters more there.
 - A compromised or malicious npm dependency. This project has a small,
   auditable dependency tree by design, but it hasn't been through an
   independent security audit.

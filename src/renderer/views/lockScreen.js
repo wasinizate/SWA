@@ -4,6 +4,8 @@
 // "Forgot passphrase?" link only appears if a recovery phrase has been
 // set up (also opt-in, same module).
 
+import { ipcErrorMessage } from '../helpers.js';
+
 export function renderLockScreen(root, { status, onUnlocked }) {
   renderUnlockForm();
 
@@ -45,7 +47,7 @@ export function renderLockScreen(root, { status, onUnlocked }) {
         await window.api.vault.unlock(passphrase);
         onUnlocked();
       } catch (err) {
-        showError(err.message);
+        showError(ipcErrorMessage(err));
       }
     });
 
@@ -109,7 +111,7 @@ export function renderLockScreen(root, { status, onUnlocked }) {
         await window.api.vault.recoverWithPhrase(words);
         onUnlocked();
       } catch (err) {
-        showError(err.message);
+        showError(ipcErrorMessage(err));
       }
     });
   }

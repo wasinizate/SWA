@@ -39,6 +39,7 @@ const { registerBackupIpc } = require('./ipc/backupIpc');
 const idleLock = require('./security/idleLock');
 const reminderScheduler = require('./reminders/reminderScheduler');
 const syncScheduler = require('./sync/syncScheduler');
+const autoBackup = require('./backup/autoBackup');
 const connection = require('./db/connection');
 const settingsRepo = require('./db/repositories/settings');
 
@@ -62,6 +63,7 @@ function notifyLocked(reason) {
   idleLock.stop();
   reminderScheduler.stop();
   syncScheduler.stop();
+  autoBackup.stop();
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('vault:locked', { reason });
   }
@@ -73,6 +75,7 @@ function notifyUnlocked() {
   idleLock.start(getIdleTimeoutSeconds, notifyLocked);
   reminderScheduler.start(() => mainWindow);
   syncScheduler.start(() => mainWindow);
+  autoBackup.start();
 }
 
 app.whenReady().then(() => {
@@ -117,6 +120,7 @@ app.on('window-all-closed', () => {
   idleLock.stop();
   reminderScheduler.stop();
   syncScheduler.stop();
+  autoBackup.stop();
   connection.close();
   if (process.platform !== 'darwin') app.quit();
 });

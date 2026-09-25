@@ -19,11 +19,27 @@ files:
   - src/**/*
   - package.json
   - node_modules/**/*
-# better-sqlite3-multiple-ciphers ships a native .node binary. Native
-# modules can't be loaded from inside an asar archive, so this unpacks
-# just that file into app.asar.unpacked/ at build time.
+  # FullCalendar's runtime files are already copied into
+  # src/renderer/vendor/ by scripts/copy-vendor-assets.js -- the package
+  # itself is never require()d at runtime, so shipping it too is dead
+  # weight.
+  - "!node_modules/fullcalendar/**"
+  # better-sqlite3-multiple-ciphers ships SQLite's C source (deps/, src/)
+  # for building from scratch -- never used at runtime.
+  - "!node_modules/better-sqlite3-multiple-ciphers/deps/**"
+  - "!node_modules/better-sqlite3-multiple-ciphers/src/**"
+# Don't add a `files` list under win/mac/linux below: a platform-level
+# list *replaces* this one (it isn't merged), which silently packages the
+# whole project folder. Platform-specific pruning goes in the afterPack
+# hook instead.
+#
+# Native modules can't be loaded from inside an asar archive, so this
+# unpacks the .node binaries into app.asar.unpacked/ at build time...
 asarUnpack:
   - "**/*.node"
+# ...and this then deletes all but the target OS/CPU's one (the package
+# ships 8). See the script for why it isn't done with `files` patterns.
+afterPack: scripts/prune-native-prebuilds.js
 win:
   target: nsis
 mac:

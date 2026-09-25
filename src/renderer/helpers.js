@@ -31,6 +31,14 @@ export function hashHue(str) {
   return hash % 360;
 }
 
+// An Error thrown in a main-process IPC handler reaches the renderer as
+// "Error invoking remote method 'x:y': Error: <real message>". This
+// returns just the real message, for showing to the user.
+export function ipcErrorMessage(err) {
+  const message = (err && err.message) || String(err);
+  return message.replace(/^Error invoking remote method '[^']*': (?:[A-Za-z]*Error: )?/, '');
+}
+
 export function formatDateTime(isoString) {
   if (!isoString) return '';
   // toLocaleString() with no options includes seconds in most locales --
@@ -182,11 +190,19 @@ export function orderStatusLabel(value) {
 // as an extra "(legacy)" option if it predates the fixed list (e.g. free
 // text typed before this dropdown existed) -- so old data is never
 // silently changed out from under the user.
+//
+// The current value is marked `selected`. Without that the <select> shows
+// its first option (Pending), and saving an order's own page -- even just
+// to fix its description -- silently reset a Completed order to Pending.
 export function buildStatusOptions(currentValue) {
   const isKnown = ORDER_STATUSES.some((s) => s.value === currentValue);
   const legacyOption =
-    currentValue && !isKnown ? `<option value="${escapeHtml(currentValue)}">${escapeHtml(currentValue)} (legacy)</option>` : '';
-  const knownOptions = ORDER_STATUSES.map((s) => `<option value="${s.value}">${s.label}</option>`).join('');
+    currentValue && !isKnown
+      ? `<option value="${escapeHtml(currentValue)}" selected>${escapeHtml(currentValue)} (legacy)</option>`
+      : '';
+  const knownOptions = ORDER_STATUSES.map(
+    (s) => `<option value="${s.value}"${s.value === currentValue ? ' selected' : ''}>${s.label}</option>`
+  ).join('');
   return legacyOption + knownOptions;
 }
 
@@ -241,6 +257,23 @@ export function fromDateInputValue(dateString) {
   return fromDatetimeLocalValue(`${dateString}T00:00`);
 }
 
+// Local-calendar YYYY-MM-DD `days` from today, for the quick follow-up
+// presets (1 day / 3 days / 1 week) -- same plain date-string format as
+// person_interactions.follow_up_date.
+export function followUpDateInDays(days) {
+  const target = new Date();
+  target.setDate(target.getDate() + days);
+  return toDateInputValue(target.toISOString());
+}
+
+// The quick follow-up choices offered wherever a note can be logged
+// without opening the full Activity form.
+export const FOLLOW_UP_PRESETS = [
+  { days: 1, label: '1 day' },
+  { days: 3, label: '3 days' },
+  { days: 7, label: '1 week' },
+];
+
 // Collapses whitespace/newlines and truncates for a table-row preview of a
 // long description. The full text is always still available by opening
 // the order for editing.
@@ -266,14 +299,23 @@ export function loadingHtml(label = 'Loading…') {
   return `<p class="loading-state">${escapeHtml(label)}</p>`;
 }
 
-// Whole days elapsed since an ISO-8601 timestamp -- plain elapsed-time
-// arithmetic, not a calendar-day comparison, so this doesn't carry the
-// date-only-field timezone risk called out elsewhere in this codebase
-// (see helpers.js's toDatetimeLocalValue() comments). Returns null for
-// a missing timestamp (e.g. a client with no orders yet) so callers can
-// tell "never" apart from "today" (0).
+// Whole days since an ISO-8601 timestamp (plain elapsed time), or, for a
+// date-only "YYYY-MM-DD" value like date_paid, whole calendar days since
+// that local date. The date-only case needs its own path: new Date() reads
+// "2026-09-24" as UTC midnight, which in US time zones is the previous
+// evening, so a payment made today showed as "1 day ago" late in the day.
+// Returns null for a missing value (e.g. a client with no orders yet) so
+// callers can tell "never" apart from "today" (0).
 export function daysSince(isoString) {
   if (!isoString) return null;
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoString);
+  if (dateOnly) {
+    const then = new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]));
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    // round, not floor: a span crossing a DST change is 23 or 25 hours.
+    return Math.max(0, Math.round((today.getTime() - then.getTime()) / (1000 * 60 * 60 * 24)));
+  }
   const then = new Date(isoString).getTime();
   if (Number.isNaN(then)) return null;
   return Math.max(0, Math.floor((Date.now() - then) / (1000 * 60 * 60 * 24)));

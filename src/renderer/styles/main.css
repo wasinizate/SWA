@@ -1,8 +1,10 @@
 /* Default theme (unchanged from before theming existed) -- also the
    fallback for an unset/unrecognized data-theme, so the app is never
    left half-styled. Every other theme below overrides only these same
-   custom properties; no other rule in this file references a color
-   directly (see src/renderer/theme.js for how data-theme gets set). */
+   custom properties; outside these blocks, colors come from the
+   variables -- the one exception is the Pokédex theme's own scoped
+   section at the end of the file (see src/renderer/theme.js for how
+   data-theme gets set). */
 :root {
   --bg: #0f1115;
   --surface: #171a21;
@@ -99,7 +101,9 @@
   --text-muted: #8a6b78;
   --accent: #e85d8a;
   --danger: #d1495b;
-  --warning: #d98324;
+  /* Deep enough to read as text on white (4.3:1) -- the VIP badge,
+     "Due today", the Dashboard's backup reminder. #d98324 was 2.7:1. */
+  --warning: #b8650f;
   /* Soft warm-pink shadow instead of the dark themes' flat black -- a
      harsh rgba(0,0,0,.45) overlay reads out of place next to this
      theme's otherwise soft, light palette. */
@@ -110,6 +114,44 @@
   --chip-fg-light: 34%;
   --chip-border-sat: 45%;
   --chip-border-light: 78%;
+}
+
+/* Pokédex: a light theme. The sidebar is the red casing (lens and status
+   lights included), the content area is the pale-green screen, and the
+   client card reads as a dex entry -- see the "Pokédex theme" section at
+   the end of this file for those component touches, which use the
+   --dex-* tokens below. Accent is a slightly deepened Pokémon logo blue
+   (#2566a8, vs the logo's #2a75bb) so it clears WCAG AA both as link
+   text on the screen background (5.0:1) and behind white button text
+   (5.9:1) -- hence the white --on-accent override, the only theme that
+   needs one. */
+:root[data-theme="pokedex"] {
+  --bg: #e9eee4;
+  --surface: #f8faf5;
+  --surface-alt: #e0e7d8;
+  --border: #b3c0a8;
+  --text: #1c2418;
+  --text-muted: #56664f;
+  --accent: #2566a8;
+  --on-accent: #ffffff;
+  --danger: #c8102e;
+  --warning: #8f5b00;
+  --shadow: rgba(28, 36, 24, 0.2);
+  /* Type-badge chips: saturated fill, white text. */
+  --chip-bg-sat: 55%;
+  --chip-bg-light: 34%;
+  --chip-fg-sat: 0%;
+  --chip-fg-light: 100%;
+  --chip-border-sat: 60%;
+  --chip-border-light: 24%;
+
+  --dex-red: #dc0a2d;
+  --dex-red-dark: #9b0019;
+  --dex-yellow: #ffcb05;
+  --dex-ink: #1c1f1a;
+  --dex-screen: #9bbc0f;
+  --dex-screen-ink: #0f380f;
+  --dex-screen-muted: #1f4d1f;
 }
 
 * {
@@ -338,6 +380,13 @@ label {
   margin-bottom: 0.6rem;
   font-size: 0.85rem;
   color: var(--text-muted);
+}
+
+/* The `hidden` attribute has to win over every display rule in this file
+   (e.g. input's display: block just below), or el.hidden = true silently
+   does nothing. */
+[hidden] {
+  display: none !important;
 }
 
 input,
@@ -718,6 +767,9 @@ hr {
 .lock-button {
   background: var(--surface-alt);
   border: 1px solid var(--border);
+  /* Own color: the base button's --on-accent is for text on an accent
+     fill, and was near-invisible on this dark surface. */
+  color: var(--text);
 }
 
 /* shell.js's "Recently viewed" strip -- sits between the main nav and
@@ -875,9 +927,8 @@ hr {
   margin-top: 0;
 }
 
-/* Client totals: a plain divider rather than a nested card, since it's
-   always visible (not collapsed like the two panels above) and sits
-   directly under the "Orders" heading it belongs to. */
+/* By year / By month breakdown in a client's Spending section: a plain
+   divider under the stat grid rather than a nested card. */
 .totals-card {
   border-top: 1px solid var(--border);
   padding-top: 0.75rem;
@@ -1023,6 +1074,24 @@ hr {
   padding: 0.16rem 0.55rem;
   font-size: 0.76rem;
   font-weight: 600;
+}
+
+/* A platform badge that opens the account's profile in the browser
+   (personDetail.js). The small arrow says "opens elsewhere" without any
+   helper text. */
+.platform-badge-link {
+  gap: 0.25rem;
+}
+
+.badge-arrow {
+  font-size: 0.7rem;
+  opacity: 0.6;
+  transition: opacity 0.1s ease;
+}
+
+.platform-badge-link:hover .badge-arrow,
+.platform-badge-link:focus-visible .badge-arrow {
+  opacity: 1;
 }
 
 /* Priority badge (VIP etc.) reuses .priority-badge as-is; this is just
@@ -1212,6 +1281,9 @@ hr {
    .inline-form itself. */
 #quick-follow-up-form {
   flex-wrap: nowrap;
+  /* .inline-form's bottom margin would sit it off-center next to
+     "+ New order". */
+  margin: 0;
 }
 
 #quick-follow-up-form select,
@@ -1221,6 +1293,32 @@ hr {
 
 #quick-follow-up-note {
   width: 11rem;
+}
+
+.row-actions-nowrap {
+  flex-wrap: nowrap;
+}
+
+/* Clients list's "+ Note" form (people.js) -- one line directly under
+   the client's own row, visually attached to it. */
+.quick-note-row td {
+  background: var(--surface-alt);
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.quick-note-form {
+  flex-wrap: nowrap;
+  margin: 0;
+}
+
+.quick-note-form .quick-note-text {
+  flex: 1 1 auto;
+}
+
+.quick-note-form select,
+.quick-note-form button {
+  flex: 0 0 auto;
 }
 
 /* Divider between the ID card and the collapsible detail sections below
@@ -1319,6 +1417,12 @@ hr {
 .stat-clickable:hover .income-stat-value,
 .stat-clickable:focus-visible .income-stat-value {
   color: var(--accent);
+}
+
+/* Dashboard's "Last backup" when it's never happened or is over a week
+   old. */
+.income-stat-warn .income-stat-value {
+  color: var(--warning);
 }
 
 .stat-clickable:focus-visible {
@@ -1651,6 +1755,9 @@ hr {
 .icon-button {
   background: none;
   border: none;
+  /* Own color, not the base button's --on-accent (meant for text on an
+     accent fill) -- on a plain dark surface that made the x invisible. */
+  color: var(--text-muted);
   cursor: pointer;
   font-size: 1rem;
   line-height: 1;
@@ -1660,6 +1767,7 @@ hr {
 }
 .icon-button:hover {
   background: var(--surface-alt);
+  color: var(--text);
 }
 
 /* incomeStatementImport.js's CSV column-mapping form -- one label+select
@@ -1730,6 +1838,13 @@ hr {
    theme CSS, so it's a safe baseline to build on. */
 #calendar-mount {
   --fc-classic-primary: var(--accent);
+  /* Normal-priority events: the theme's accent, with the same text color
+     buttons use on it (--on-accent clears AA in every theme; FullCalendar's
+     default white on its own blue doesn't). Set directly because the
+     palette's `--fc-classic-event: var(--fc-classic-primary)` already
+     resolved at :root, before the override above. */
+  --fc-classic-event: var(--accent);
+  --fc-classic-event-contrast: var(--on-accent);
   --fc-classic-button-strong: var(--accent);
   --fc-classic-button-strong-border: var(--accent);
 
@@ -1748,6 +1863,13 @@ hr {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1rem;
+}
+
+/* OnlyFans' bright #00aff0 behind FullCalendar's white active-button text
+   is only 2.5:1 -- a deeper step of the same blue for that one button. */
+:root[data-theme="onlyfans"] #calendar-mount {
+  --fc-classic-button-strong: #0080b0;
+  --fc-classic-button-strong-border: #0080b0;
 }
 
 /* Marks the day a Search-result deep link (search.js -> calendar.js's
@@ -1935,4 +2057,167 @@ hr {
   .sakura-petal {
     animation: none;
   }
+}
+
+/* ==== Pokédex theme ======================================================
+   Component touches for :root[data-theme="pokedex"] (colors are in its
+   token block near the top). Everything here is scoped to that theme, is
+   purely visual (CSS shapes and colors, no images), and never changes
+   layout enough to move a control -- switching themes should only ever
+   change the look. */
+
+/* The red casing, with a darker "hinge" down its right edge. */
+:root[data-theme="pokedex"] .sidebar {
+  background: linear-gradient(180deg, #e41436 0%, var(--dex-red) 60%, #c70828 100%);
+  border-right: 6px solid var(--dex-red-dark);
+  color: #fff;
+}
+
+:root[data-theme="pokedex"] .sidebar .nav-link,
+:root[data-theme="pokedex"] .sidebar-recent-link {
+  color: #fff;
+}
+
+:root[data-theme="pokedex"] .sidebar .nav-link:hover:not(:disabled),
+:root[data-theme="pokedex"] .sidebar-recent-link:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+:root[data-theme="pokedex"] .sidebar .nav-link.active {
+  background: var(--dex-yellow);
+  color: var(--dex-ink);
+  font-weight: 600;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.2);
+}
+
+:root[data-theme="pokedex"] .sidebar-recent-title {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+:root[data-theme="pokedex"] .sidebar-search input[type="search"] {
+  background: var(--surface);
+  border: 2px solid var(--dex-ink);
+  color: var(--text);
+}
+
+:root[data-theme="pokedex"] .lock-button {
+  background: var(--dex-ink);
+  color: #fff;
+  border: none;
+}
+
+/* The big blue lens, then "SWA", then the three little status lights. */
+:root[data-theme="pokedex"] .brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+:root[data-theme="pokedex"] .brand::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #d8f1ff 0 12%, #3aa7f2 16% 55%, #185a9d 75%);
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px var(--dex-ink);
+}
+
+:root[data-theme="pokedex"] .brand::after {
+  content: '';
+  width: 9px;
+  height: 9px;
+  margin-right: 28px;
+  border-radius: 50%;
+  background: #ff3b3b;
+  box-shadow:
+    14px 0 0 #ffcb05,
+    28px 0 0 #3fbf4a;
+}
+
+/* Cards get the device's chunky dark outlines. */
+:root[data-theme="pokedex"] .card,
+:root[data-theme="pokedex"] .detail,
+:root[data-theme="pokedex"] .id-card {
+  border: 2px solid var(--dex-ink);
+  box-shadow: 3px 3px 0 var(--shadow);
+}
+
+/* Solid buttons read as physical, pressable buttons. */
+:root[data-theme="pokedex"] button:not([class]),
+:root[data-theme="pokedex"] button.danger {
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.25);
+}
+
+:root[data-theme="pokedex"] button.btn-secondary {
+  border: 2px solid var(--dex-ink);
+}
+
+/* ---- The client card as a dex entry ---------------------------------- */
+
+/* Entry number above the name -- only shown in this theme. */
+.dex-number {
+  display: none;
+}
+
+:root[data-theme="pokedex"] .dex-number {
+  display: block;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+}
+
+/* Poké Ball avatar: red top, white bottom, dark band, and the initials
+   sitting in the white center button. */
+:root[data-theme="pokedex"] .id-avatar {
+  background:
+    radial-gradient(circle at center, #fff 0 31%, var(--dex-ink) 31% 38%, transparent 38%),
+    linear-gradient(180deg, var(--dex-red) 0 45%, var(--dex-ink) 45% 55%, #fff 55%);
+  border: 2px solid var(--dex-ink);
+  color: var(--dex-ink);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+/* The stats row as an old handheld's green screen. */
+:root[data-theme="pokedex"] .stat-row {
+  background: var(--dex-screen-ink);
+  border: 3px solid var(--dex-ink);
+  box-shadow: 0 0 0 4px #cfd6c8;
+  margin-left: 4px;
+  margin-right: 4px;
+}
+
+:root[data-theme="pokedex"] .stat {
+  background: var(--dex-screen);
+}
+
+:root[data-theme="pokedex"] .stat-label {
+  color: var(--dex-screen-muted);
+  font-weight: 700;
+}
+
+:root[data-theme="pokedex"] .stat-value {
+  color: var(--dex-screen-ink);
+  font-family: Consolas, 'Courier New', monospace;
+}
+
+:root[data-theme="pokedex"] .stat-value.danger {
+  color: #7a0014;
+}
+
+/* Tags, platforms and revenue chips as type badges. */
+:root[data-theme="pokedex"] .platform-badge,
+:root[data-theme="pokedex"] .pref-chip.chip-color,
+:root[data-theme="pokedex"] .prev-chip {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
 }

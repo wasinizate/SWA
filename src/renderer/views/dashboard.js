@@ -9,7 +9,7 @@
 // src/main/db/repositories/settings.js) -- same key/value pattern already
 // used there for the theme and auto-lock settings.
 
-import { formatMoney, loadingHtml, daysSince } from '../helpers.js';
+import { formatMoney, loadingHtml, daysSince, formatDaysSince } from '../helpers.js';
 import { showToast } from '../toast.js';
 import { renderBucket } from '../dueDateSummary.js';
 
@@ -37,7 +37,7 @@ export function renderDashboardView(container, { navigate }) {
   init();
 
   async function init() {
-    const [people, openOrderCount, dueSummary, totalsAll, slated, note, lastOrderByPerson, quietThresholdDays, syncStatus, openFollowUpCount] =
+    const [people, openOrderCount, dueSummary, totalsAll, slated, note, lastOrderByPerson, quietThresholdDays, syncStatus, openFollowUpCount, backupStatus] =
       await Promise.all([
         window.api.person.listAll(),
         window.api.order.getOpenOrderCount(),
@@ -49,6 +49,7 @@ export function renderDashboardView(container, { navigate }) {
         window.api.settings.getQuietClientThresholdDays(),
         window.api.sync.getStatus(),
         window.api.personInteraction.getOpenFollowUpCount(),
+        window.api.backup.getStatus(),
       ]);
 
     // A client with zero orders was never really "heard from" to begin
@@ -68,18 +69,24 @@ export function renderDashboardView(container, { navigate }) {
       quietClientCount,
       pendingSyncCount: syncStatus.pendingCount,
       openFollowUpCount,
+      lastBackupAt: backupStatus.lastBackupAt,
     });
     renderDue(dueSummary);
     container.querySelector('#dashboard-note').value = note ?? '';
   }
 
-  function renderStats({ clientCount, openOrderCount, totalsAll, slated, quietClientCount, pendingSyncCount, openFollowUpCount }) {
-    // 'YYYY-MM' in UTC, matching the strftime('%Y-%m', date_paid) grouping
-    // getTotalsAll() uses server-side (no 'localtime' modifier there) --
-    // using the browser's local month here would occasionally disagree
-    // with which bucket a late-month order landed in. See CLAUDE.md's
-    // note on date/timezone bugs in this codebase.
-    const currentPeriod = new Date().toISOString().slice(0, 7);
+  function renderStats({ clientCount, openOrderCount, totalsAll, slated, quietClientCount, pendingSyncCount, openFollowUpCount, lastBackupAt }) {
+    // Local 'YYYY-MM'. date_paid is a plain local calendar date, so
+    // getTotalsAll()'s strftime('%Y-%m', date_paid) buckets are local
+    // months too. (Using toISOString() here -- UTC -- flipped to next
+    // month early on the evening of the last day in US time zones, and
+    // showed $0.)
+    const now = new Date();
+    const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    // Never backed up, or not for over a week: worth a nudge.
+    const backupDays = daysSince(lastBackupAt);
+    const backupStale = backupDays === null || backupDays > 7;
     const thisMonth = totalsAll.byMonth.find((m) => m.period === currentPeriod);
     const thisMonthCents = thisMonth ? thisMonth.total_cents : 0;
 
@@ -113,6 +120,10 @@ export function renderDashboardView(container, { navigate }) {
         <div class="income-stat-label">Pending sync updates</div>
         <div class="income-stat-value">${pendingSyncCount}</div>
       </button>
+      <button type="button" class="income-stat stat-clickable${backupStale ? ' income-stat-warn' : ''}" id="stat-last-backup">
+        <div class="income-stat-label">Last backup</div>
+        <div class="income-stat-value">${formatDaysSince(backupDays)}</div>
+      </button>
     `;
 
     // Each stat doubles as a shortcut into the page that actually owns
@@ -127,6 +138,7 @@ export function renderDashboardView(container, { navigate }) {
     statsEl.querySelector('#stat-quiet-clients').addEventListener('click', () => navigate('people', { quietOnly: true }));
     statsEl.querySelector('#stat-follow-ups').addEventListener('click', () => navigate('followUps'));
     statsEl.querySelector('#stat-pending-sync').addEventListener('click', () => navigate('settings'));
+    statsEl.querySelector('#stat-last-backup').addEventListener('click', () => navigate('settings'));
   }
 
   function renderDue({ missed, dueToday, dueSoon }) {

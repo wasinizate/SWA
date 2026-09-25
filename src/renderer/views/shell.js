@@ -23,6 +23,42 @@ const SIDEBAR_SEARCH_DEBOUNCE_MS = 200;
 const SIDEBAR_SEARCH_MIN_LENGTH = SEARCH_MIN_QUERY_LENGTH;
 const SIDEBAR_SEARCH_PREVIEW_LIMIT = 5;
 
+// Readable names for the Back button ("← Back to Follow-ups"). Detail
+// pages aren't listed here -- they name themselves once their data loads
+// (see navigate.titleSetter() below), e.g. a client's own label.
+const VIEW_LABELS = {
+  dashboard: 'Dashboard',
+  people: 'Clients',
+  orders: 'Orders',
+  followUps: 'Follow-ups',
+  contentLibrary: 'Content library',
+  analytics: 'Analytics',
+  calendar: 'Calendar',
+  search: 'Search',
+  expenses: 'Expenses',
+  settings: 'Settings',
+};
+
+// Which sidebar item stays lit while on a page that has no sidebar entry
+// of its own, so you never lose your place.
+const NAV_PARENT = {
+  personDetail: 'people',
+  orderDetail: 'orders',
+  contentDetail: 'contentLibrary',
+};
+
+const MAX_HISTORY = 50;
+
+// One-time instructions to a page ("open a new event", "focus the add
+// field") that shouldn't fire again when Back returns to that page.
+const ONE_SHOT_PARAMS = ['openNewEventToday', 'focusAddForm'];
+
+function withoutOneShotParams(params) {
+  const kept = { ...params };
+  for (const key of ONE_SHOT_PARAMS) delete kept[key];
+  return kept;
+}
+
 // Module-scoped (not per-call) so the single pair of document-level
 // listeners set up below survives across multiple renderShell() calls in
 // one session (once per unlock -- see the comment at the bottom of this
@@ -64,14 +100,70 @@ export function renderShell(root, { onLocked }) {
 
   const content = root.querySelector('#content');
 
-  function navigate(viewName, params = {}) {
+  // Browser-style back history, reset on every unlock (renderShell runs
+  // once per unlock). Each entry is { viewName, params, title }.
+  const backStack = [];
+  let current = null;
+
+  function isSameEntry(entry, viewName, params) {
+    return entry.viewName === viewName && JSON.stringify(entry.params) === JSON.stringify(params);
+  }
+
+  // `replace` swaps the current page out of history instead of stacking
+  // on top of it -- for transient pages (e.g. the Clients list in "pick
+  // someone to link" mode) that Back shouldn't land on again.
+  function navigate(viewName, params = {}, { replace = false } = {}) {
+    const entryParams = withoutOneShotParams(params);
+    if (current && !replace && !isSameEntry(current, viewName, entryParams)) {
+      backStack.push(current);
+      if (backStack.length > MAX_HISTORY) backStack.shift();
+    }
+    // A -> (replaced page) -> A shouldn't leave two A's stacked up.
+    while (backStack.length && isSameEntry(backStack[backStack.length - 1], viewName, entryParams)) backStack.pop();
+    current = { viewName, params: entryParams, title: VIEW_LABELS[viewName] || null };
+    show(viewName, params);
+  }
+
+  // Returns to the previous page, or to the fallback if there's no
+  // history yet (e.g. the very first page after unlocking).
+  navigate.back = (fallbackView = 'people', fallbackParams = {}) => {
+    const previous = backStack.pop();
+    if (previous) {
+      current = previous;
+      show(previous.viewName, previous.params);
+    } else {
+      navigate(fallbackView, fallbackParams, { replace: true });
+    }
+  };
+
+  navigate.backLabel = (fallbackLabel = 'Clients') => {
+    const previous = backStack[backStack.length - 1];
+    return previous ? previous.title || 'previous page' : fallbackLabel;
+  };
+
+  // Grabbed synchronously when a detail page starts rendering, so a title
+  // set after an async load always lands on that page's own history
+  // entry, even if the user has already navigated somewhere else.
+  navigate.titleSetter = () => {
+    const entry = current;
+    return (title) => {
+      if (entry) entry.title = title;
+    };
+  };
+
+  currentNavigate = navigate;
+
+  function show(viewName, params) {
+    const navView = NAV_PARENT[viewName] || viewName;
     root.querySelectorAll('.nav-link[data-view]').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.view === viewName);
+      btn.classList.toggle('active', btn.dataset.view === navView);
     });
+    // Picks up clients deleted or merged away since the last redraw.
+    if (currentRecentContainer) renderRecentClients(currentRecentContainer, navigate);
     content.innerHTML = '';
 
     if (viewName === 'dashboard') renderDashboardView(content, { navigate });
-    else if (viewName === 'people') renderPeopleView(content, { navigate, quietOnly: params.quietOnly, focusAddForm: params.focusAddForm });
+    else if (viewName === 'people') renderPeopleView(content, { navigate, ...params });
     else if (viewName === 'personDetail') renderPersonDetailView(content, { navigate, personId: params.personId });
     else if (viewName === 'orderDetail') renderOrderDetailView(content, { navigate, orderId: params.orderId });
     else if (viewName === 'orders') renderOrdersView(content, { navigate });
@@ -318,6 +410,22 @@ function setUpSidebarSearch(root, navigate) {
         currentSearchInput.focus();
         currentSearchInput.select();
       }
+
+      // Alt+Left (Cmd+[ on macOS) goes back, same as a browser. Not while
+      // typing: on macOS Alt+Left moves the cursor by a word.
+      const isBackShortcut = (event.altKey && event.key === 'ArrowLeft') || (event.metaKey && event.key === '[');
+      if (isBackShortcut && !isEditableTarget(event.target) && canGoBack()) {
+        event.preventDefault();
+        currentNavigate.back();
+      }
+    });
+
+    // The mouse's side "back" button.
+    document.addEventListener('mouseup', (event) => {
+      if (event.button === 3 && canGoBack()) {
+        event.preventDefault();
+        currentNavigate.back();
+      }
     });
 
     // Fired by personDetail.js once its recordPersonView() write actually
@@ -329,14 +437,24 @@ function setUpSidebarSearch(root, navigate) {
   }
 }
 
+// Going back underneath an open modal would leave the modal floating over
+// a different page than the one it belongs to.
+function canGoBack() {
+  return Boolean(currentNavigate) && !document.querySelector('.modal-overlay');
+}
+
+function isEditableTarget(target) {
+  return Boolean(target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)));
+}
+
 // Sidebar's "Recently viewed" list (see settings.js's recordPersonView()/
 // getRecentlyViewedPersons()) -- a quick way back to whoever you were
 // just looking at without a re-search, visible on every page since it
 // lives in the sidebar rather than e.g. the Dashboard only.
+// First drawn by the navigate('people') call right after this runs.
 function setUpRecentClients(root, navigate) {
   currentRecentContainer = root.querySelector('#sidebar-recent');
   currentNavigate = navigate;
-  renderRecentClients(currentRecentContainer, navigate);
 }
 
 async function renderRecentClients(container, navigate) {

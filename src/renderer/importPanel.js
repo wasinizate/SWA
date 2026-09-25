@@ -6,7 +6,7 @@
 // people.js/orders.js can show the exact same flow instead of a second,
 // possibly-drifting copy of it.
 
-import { escapeHtml, formatMoney, orderStatusLabel, previewText } from './helpers.js';
+import { escapeHtml, formatMoney, orderStatusLabel, previewText, ipcErrorMessage } from './helpers.js';
 
 // Formats a single diff value for display in the change list below --
 // money/status get their usual display treatment, long text fields get
@@ -77,7 +77,7 @@ export function renderImportPanel(container, { onImported } = {}) {
       const preview = await window.api.dataExchange.previewImport(pendingImportFileContents, passphrase);
       renderImportPreview(preview, passphrase);
     } catch (err) {
-      errorEl.textContent = err.message;
+      errorEl.textContent = ipcErrorMessage(err);
       errorEl.hidden = false;
     }
   });
@@ -181,7 +181,7 @@ export function renderImportPanel(container, { onImported } = {}) {
       pendingImportFileContents = null;
       if (onImported) onImported(result);
     } catch (err) {
-      errorEl.textContent = err.message;
+      errorEl.textContent = ipcErrorMessage(err);
       errorEl.hidden = false;
     }
   }

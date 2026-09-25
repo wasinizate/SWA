@@ -176,6 +176,47 @@ function setSyncPassphraseBlob(blob) {
 
 // The one root folder the scanner walks -- same "pick once, remember
 // it" shape as getSyncFolderPath()/setSyncFolderPath() above.
+// ---- Automatic backups (see src/main/backup/autoBackup.js) -------------
+
+const DEFAULT_AUTO_BACKUP_KEEP = 7;
+
+function getAutoBackupSettings() {
+  return {
+    enabled: getSetting('auto_backup_enabled', '0') === '1',
+    folderPath: getSetting('auto_backup_folder', ''),
+    keep: Number(getSetting('auto_backup_keep', DEFAULT_AUTO_BACKUP_KEEP)) || DEFAULT_AUTO_BACKUP_KEEP,
+    lastAutoBackupAt: getSetting('last_auto_backup_at', null),
+    lastError: getSetting('auto_backup_last_error', ''),
+  };
+}
+
+function setAutoBackupEnabled(enabled) {
+  setSetting('auto_backup_enabled', enabled ? '1' : '0');
+}
+
+function setAutoBackupFolder(folderPath) {
+  setSetting('auto_backup_folder', folderPath || '');
+}
+
+function setAutoBackupKeep(keep) {
+  setSetting('auto_backup_keep', String(keep));
+}
+
+function recordAutoBackupResult({ at, error }) {
+  if (at) setSetting('last_auto_backup_at', at);
+  setSetting('auto_backup_last_error', error || '');
+}
+
+// Most recent backup of either kind (manual "Create backup" or automatic)
+// -- what the Dashboard's "Last backup" reminder is about.
+function getLastBackupAt() {
+  return getSetting('last_backup_at', null);
+}
+
+function setLastBackupAt(isoString) {
+  setSetting('last_backup_at', isoString);
+}
+
 function getContentLibraryRootPath() {
   return getSetting('content_library_root_path', '');
 }
@@ -222,6 +263,14 @@ module.exports = {
   getQuietClientThresholdDays,
   setQuietClientThresholdDays,
   getSyncInstanceId,
+  DEFAULT_AUTO_BACKUP_KEEP,
+  getAutoBackupSettings,
+  setAutoBackupEnabled,
+  setAutoBackupFolder,
+  setAutoBackupKeep,
+  recordAutoBackupResult,
+  getLastBackupAt,
+  setLastBackupAt,
   getSyncFolderPath,
   setSyncFolderPath,
   getSyncEnabled,

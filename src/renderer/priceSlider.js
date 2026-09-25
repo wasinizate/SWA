@@ -42,8 +42,10 @@ export function wirePriceSlider(container, idPrefix, onChange) {
   const rangeEl = container.querySelector(`#${idPrefix}-range`);
   const numberEl = container.querySelector(`#${idPrefix}-number`);
 
+  // Never negative. This field saves on change rather than through a
+  // form submit, so the browser's min="0" validation never runs on it.
   function currentCents() {
-    return Math.round((Number.parseFloat(numberEl.value) || 0) * 100);
+    return Math.max(0, Math.round((Number.parseFloat(numberEl.value) || 0) * 100));
   }
 
   rangeEl.addEventListener('input', () => {
@@ -52,10 +54,13 @@ export function wirePriceSlider(container, idPrefix, onChange) {
   rangeEl.addEventListener('change', () => onChange(currentCents()));
 
   numberEl.addEventListener('input', () => {
-    const cents = currentCents();
-    if (cents <= Number(rangeEl.max)) rangeEl.value = cents;
+    rangeEl.value = Math.min(currentCents(), Number(rangeEl.max));
   });
-  numberEl.addEventListener('change', () => onChange(currentCents()));
+  numberEl.addEventListener('change', () => {
+    const cents = currentCents();
+    numberEl.value = (cents / 100).toFixed(2);
+    onChange(cents);
+  });
 
   return { getCents: currentCents };
 }

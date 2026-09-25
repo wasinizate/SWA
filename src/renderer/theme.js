@@ -13,12 +13,13 @@ export const THEMES = [
   { id: 'onlyfans', label: 'OnlyFans', swatch: ['#27272b', '#00aff0'] },
   { id: 'fansly', label: 'Fansly', swatch: ['#0d1117', '#2799f6'] },
   { id: 'sakura', label: 'Sakura 🌸', swatch: ['#fff6f8', '#e85d8a'] },
+  { id: 'pokedex', label: 'Pokédex', swatch: ['#dc0a2d', '#e9eee4'] },
 ];
 
-// The one theme with a light background -- used to decide whether the
-// Calendar view should force FullCalendar's dark palette (see
-// calendar.js) or let it fall back to its light default.
-const LIGHT_THEME_IDS = new Set(['sakura']);
+// Themes with a light background -- used to decide whether the Calendar
+// view should force FullCalendar's dark palette (see calendar.js) or let
+// it fall back to its light default.
+const LIGHT_THEME_IDS = new Set(['sakura', 'pokedex']);
 
 export function getCurrentTheme() {
   return document.documentElement.dataset.theme || 'default';

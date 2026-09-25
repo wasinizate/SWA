@@ -42,20 +42,23 @@ which have since shipped:
   page in the app -- see commands.js, quickReminderModal.js. This is
   also most of what "quick notes/tags speed" below was asking for.
 
-Follow-on gap found spot-checking the above (2026-09-24): person.js's
-`mergeInto()` carefully carries over orders, platform accounts, tags,
-Activity entries, person_links, and cross-instance external_id/
-person_external_links from the loser to the survivor, but never touches
-`persons.is_shared` (0012_shared_sync.sql). If the client being merged
-away (the "loser") was marked shared for the shared-folder sync feature
-but the survivor wasn't, the merge silently drops that client out of
-`listShared()`'s export scope -- no error, no warning, just one fewer
-client showing up in the next sync bundle. Fix is small: `is_shared:
-loser.is_shared || survivor.is_shared` written onto the survivor inside
-the same merge transaction, right alongside the external_id handling
-already there.
+~~Follow-on gap found spot-checking the above (2026-09-24): merging a
+client marked "Shared with collaborators" into one that isn't silently
+dropped it out of shared-folder sync.~~ Fixed (2026-09-25): person.js's
+`mergeInto()` now keeps the survivor shared if either side was.
 
 What's left, still needing real design decisions before being built:
+
+- **Restoring a backup made under an older passphrase** (found
+  2026-09-25). `restoreBackup.js` checks the *same* passphrase against
+  both the backup file and the live vault, so once the passphrase changes
+  -- including the forced change after a recovery-phrase unlock -- every
+  earlier backup, automatic ones included, can't be restored in-app. The
+  workaround today is to change the passphrase back first. Proper fix:
+  ask for the backup's own passphrase separately, open it with that, and
+  re-key the restored copy (`PRAGMA rekey`) to the current passphrase
+  before swapping it in. Worth doing carefully, since it's the
+  destructive restore path.
 
 - **Custom content order workflow.** Orders already carry a free-text
   status (pending/in_progress/on_hold/completed/cancelled, editable
@@ -69,14 +72,12 @@ What's left, still needing real design decisions before being built:
   Simplest version: an additional set of status presets a user can pick
   instead of the generic ones per-order (or per a new is_custom_request
   flag), rather than inventing a whole second order type.
-- **Quick notes/tags speed, remaining gap.** The "/" command palette
-  above covers app-wide fast actions, but logging an Activity entry for
-  a *specific* client still means opening that client's full page first
-  -- `/reminder` has no client context, it's a standalone calendar
-  reminder. A `/note <client>` -style command, or a quick-log
-  affordance right on the Clients list per row, would close that gap --
-  not built yet since it needs a client-picker UX decision the simpler
-  commands didn't.
+- ~~**Quick notes/tags speed, remaining gap.**~~ Shipped (2026-09-25) as
+  a "+ Note" button on each Clients list row: it opens a one-line form
+  under that row (note, optional 1 day / 3 days / 1 week follow-up) that
+  logs straight to the client's Activity log without opening their page.
+  A `/note <client>` command is still possible later but would need a
+  client-picker UX decision.
 - **Platform revenue analytics: fees/net/tips.** Gross revenue by
   platform already exists (Analytics page, analytics.js's
   getRevenueByPlatform()). Net-of-fees isn't a separate concept this
@@ -140,6 +141,8 @@ What's left, still needing real design decisions before being built:
   `shell.openExternal()` to hand off to the user's own, already-logged-in
   default browser -- gets most of the convenience with none of the above
   risk, and doesn't add a network code path to this app's own process.
+  (Shipped 2026-09-25 as clickable platform badges on a client's card --
+  see src/main/platformLinks.js.)
 - **Google Calendar / Apple Calendar sync.** In real tension with this
   app's "no network calls, fully offline" non-negotiable (see README's
   threat model), so if built, it must be:
@@ -175,8 +178,9 @@ What's left, still needing real design decisions before being built:
   `.../zh-tw/global.js` in the same "global" script-tag format this
   project already vendors its theme files in -- wiring up the calendar's
   own text (day/month names, buttons) would just be one more
-  `FILES_TO_COPY` entry plus a `<script>` tag and a `locale: 'zh-cn'`
-  option in calendar.js, a small, self-contained piece of the work.
+  `FILES_TO_COPY` entry, one more `loadScript()` in
+  `src/renderer/fullCalendarLoader.js`, and a `locale: 'zh-cn'` option in
+  calendar.js, a small, self-contained piece of the work.
   Simplified vs. Traditional: default to Simplified (`zh-cn`, the more
   common convention and mainland China's standard), but the same
   mechanism supports Traditional (`zh-tw`) as a second locale option

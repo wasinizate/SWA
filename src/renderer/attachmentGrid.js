@@ -5,7 +5,7 @@
 // byte-for-byte-identical copies of this, differing only in which
 // window.api.*Attachment methods to call.
 
-import { escapeHtml, formatBytes } from './helpers.js';
+import { escapeHtml, formatBytes, ipcErrorMessage } from './helpers.js';
 import { showToast } from './toast.js';
 
 export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024; // keep in sync with the *AttachmentIpc.js files' server-side caps
@@ -95,7 +95,7 @@ export function createAttachmentGrid({ gridEl, inputEl, api, onChange }) {
           const savedPath = await api.saveToDisk(Number(btn.dataset.saveAttachment));
           if (savedPath) showToast(`Saved to: ${savedPath}`);
         } catch (err) {
-          alert(`Failed to save: ${err.message}`);
+          alert(`Failed to save: ${ipcErrorMessage(err)}`);
         }
       });
     });
@@ -125,7 +125,7 @@ export function createAttachmentGrid({ gridEl, inputEl, api, onChange }) {
       try {
         await api.add({ fileName: file.name, mimeType: file.type || 'application/octet-stream', data: new Uint8Array(buffer) });
       } catch (err) {
-        alert(`Failed to attach "${file.name}": ${err.message}`);
+        alert(`Failed to attach "${file.name}": ${ipcErrorMessage(err)}`);
       }
     }
 

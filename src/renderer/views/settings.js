@@ -3,7 +3,7 @@
 // passphrase. Grouped into General / Security & Privacy / Data so the
 // page reads as sections instead of one long stack of identical cards.
 
-import { escapeHtml, loadingHtml, parseMoneyToCents } from '../helpers.js';
+import { escapeHtml, loadingHtml, parseMoneyToCents, daysSince, formatDaysSince, formatDateTime, ipcErrorMessage } from '../helpers.js';
 import { THEMES, applyTheme, getCurrentTheme } from '../theme.js';
 import { showToast } from '../toast.js';
 import { renderImportPanel, renderChangesList } from '../importPanel.js';
@@ -148,6 +148,7 @@ export function renderSettingsView(container, { navigate } = {}) {
         you would <code>data.db</code> itself. Restoring replaces
         everything (today's data is saved first, just in case).
       </p>
+      <div id="auto-backup-body">${loadingHtml()}</div>
       <div class="form-actions">
         <button type="button" id="create-backup" class="btn-secondary">Create backup</button>
         <button type="button" id="restore-backup" class="btn-secondary">Restore from backup</button>
@@ -265,7 +266,7 @@ export function renderSettingsView(container, { navigate } = {}) {
         await window.api.vault.setQuickUnlock(true, pass);
         confirmBox.hidden = true;
       } catch (err) {
-        quError.textContent = err.message;
+        quError.textContent = ipcErrorMessage(err);
         quError.hidden = false;
         toggle.checked = false;
       }
@@ -386,7 +387,7 @@ export function renderSettingsView(container, { navigate } = {}) {
       try {
         result = await window.api.vault.generateRecoveryPhrase(currentPassphrase);
       } catch (err) {
-        alert(err.message);
+        alert(ipcErrorMessage(err));
         return;
       }
 
@@ -627,7 +628,7 @@ export function renderSettingsView(container, { navigate } = {}) {
         showToast('Tag renamed.');
         await refreshTagManagement();
       } catch (err) {
-        alert(err.message);
+        alert(ipcErrorMessage(err));
       }
     });
   }
@@ -760,7 +761,7 @@ export function renderSettingsView(container, { navigate } = {}) {
         );
         await refreshPending();
       } catch (err) {
-        showToast(err.message || 'Sync failed.');
+        showToast(ipcErrorMessage(err) || 'Sync failed.');
       } finally {
         btn.disabled = false;
         btn.textContent = previousLabel;
@@ -785,7 +786,7 @@ export function renderSettingsView(container, { navigate } = {}) {
           showToast('Sync passphrase set.');
           await refreshSync();
         } catch (err) {
-          errorEl.textContent = err.message;
+          errorEl.textContent = ipcErrorMessage(err);
           errorEl.hidden = false;
         }
       });
@@ -898,7 +899,7 @@ export function renderSettingsView(container, { navigate } = {}) {
         showToast('Sync update applied.');
         await refreshPending();
       } catch (err) {
-        alert(`Failed to apply: ${err.message}`);
+        alert(`Failed to apply: ${ipcErrorMessage(err)}`);
       }
     });
 
@@ -922,8 +923,86 @@ export function renderSettingsView(container, { navigate } = {}) {
       resultEl.className = 'hint';
       resultEl.textContent = `Saved to: ${savedPath}`;
       showToast('Backup created.');
+      refreshAutoBackup();
     }
   });
+
+  // Automatic daily backups (see src/main/backup/autoBackup.js).
+  async function refreshAutoBackup() {
+    renderAutoBackup(await window.api.backup.getStatus());
+  }
+
+  function renderAutoBackup(status) {
+    const body = container.querySelector('#auto-backup-body');
+    const lastLine = status.lastBackupAt
+      ? `Last backup: ${formatDaysSince(daysSince(status.lastBackupAt)).toLowerCase()} (${formatDateTime(status.lastBackupAt)})`
+      : 'No backups yet.';
+
+    body.innerHTML = `
+      <div class="inline-form">
+        <label class="checkbox-label">
+          <input type="checkbox" id="auto-backup-enabled" ${status.enabled ? 'checked' : ''} /> Back up automatically every day
+        </label>
+        ${status.enabled && status.folderPath ? '<button type="button" class="btn-secondary" id="auto-backup-now">Back up now</button>' : ''}
+      </div>
+      <label>
+        Backup folder
+        <div class="inline-form">
+          <input type="text" id="auto-backup-folder" value="${escapeHtml(status.folderPath)}" placeholder="No folder chosen yet" readonly />
+          <button type="button" class="btn-secondary" id="auto-backup-choose">Choose folder…</button>
+        </div>
+      </label>
+      <label>
+        Keep the last
+        <div class="inline-form">
+          <input type="number" id="auto-backup-keep" min="1" max="365" value="${status.keep}" />
+          <span>automatic backups</span>
+        </div>
+      </label>
+      <p class="${status.lastError ? 'error' : 'hint'}" id="auto-backup-status">${escapeHtml(status.lastError ? `Last automatic backup failed: ${status.lastError}` : lastLine)}</p>
+    `;
+
+    const enabledBox = body.querySelector('#auto-backup-enabled');
+    enabledBox.addEventListener('change', async () => {
+      if (enabledBox.checked && !status.folderPath) {
+        const chosen = await window.api.backup.pickAutoFolder();
+        if (!chosen) {
+          enabledBox.checked = false;
+          return;
+        }
+      }
+      const result = await window.api.backup.setAutoEnabled(enabledBox.checked);
+      if (enabledBox.checked) showToast(result.ok ? 'Automatic backups on. First backup saved.' : `Backup failed: ${result.error}`);
+      refreshAutoBackup();
+    });
+
+    body.querySelector('#auto-backup-choose').addEventListener('click', async () => {
+      const chosen = await window.api.backup.pickAutoFolder();
+      if (!chosen) return;
+      if (status.enabled) {
+        const result = await window.api.backup.runAutoNow();
+        showToast(result.ok ? 'Backup folder changed. Backup saved there.' : `Backup failed: ${result.error}`);
+      }
+      refreshAutoBackup();
+    });
+
+    body.querySelector('#auto-backup-keep').addEventListener('change', async (event) => {
+      event.target.value = await window.api.backup.setAutoKeep(event.target.value);
+      showToast('Saved.');
+    });
+
+    const nowBtn = body.querySelector('#auto-backup-now');
+    if (nowBtn) {
+      nowBtn.addEventListener('click', async () => {
+        nowBtn.disabled = true;
+        const result = await window.api.backup.runAutoNow();
+        showToast(result.ok ? 'Backup saved.' : `Backup failed: ${result.error}`);
+        refreshAutoBackup();
+      });
+    }
+  }
+
+  refreshAutoBackup();
 
   container.querySelector('#restore-backup').addEventListener('click', async () => {
     const resultEl = container.querySelector('#backup-result');
@@ -943,7 +1022,7 @@ export function renderSettingsView(container, { navigate } = {}) {
       location.reload();
     } catch (err) {
       resultEl.className = 'error';
-      resultEl.textContent = `Failed to restore: ${err.message}`;
+      resultEl.textContent = `Failed to restore: ${ipcErrorMessage(err)}`;
     }
   });
 
@@ -970,7 +1049,7 @@ export function renderSettingsView(container, { navigate } = {}) {
           : 'Passphrase changed.'
       );
     } catch (err) {
-      errorEl.textContent = err.message;
+      errorEl.textContent = ipcErrorMessage(err);
       errorEl.hidden = false;
     }
   });

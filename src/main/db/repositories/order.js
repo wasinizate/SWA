@@ -243,13 +243,13 @@ function getClientValueSummary(personId) {
 function getRevenueByPlatformForPerson(personId) {
   return getDb()
     .prepare(
-      `SELECT platform_accounts.platform_name,
+      `SELECT MIN(platform_accounts.platform_name) AS platform_name,
               COALESCE(SUM(orders.amount_cents), 0) AS total_cents
        FROM orders
        JOIN platform_accounts ON platform_accounts.id = orders.platform_account_id
        WHERE orders.person_id = ? AND orders.date_paid IS NOT NULL AND orders.status != 'cancelled'
          AND strftime('%Y', orders.date_paid) = strftime('%Y', 'now', 'localtime')
-       GROUP BY platform_accounts.platform_name
+       GROUP BY platform_accounts.platform_name COLLATE NOCASE
        ORDER BY total_cents DESC`
     )
     .all(personId);
