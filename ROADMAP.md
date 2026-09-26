@@ -49,16 +49,10 @@ dropped it out of shared-folder sync.~~ Fixed (2026-09-25): person.js's
 
 What's left, still needing real design decisions before being built:
 
-- **Restoring a backup made under an older passphrase** (found
-  2026-09-25). `restoreBackup.js` checks the *same* passphrase against
-  both the backup file and the live vault, so once the passphrase changes
-  -- including the forced change after a recovery-phrase unlock -- every
-  earlier backup, automatic ones included, can't be restored in-app. The
-  workaround today is to change the passphrase back first. Proper fix:
-  ask for the backup's own passphrase separately, open it with that, and
-  re-key the restored copy (`PRAGMA rekey`) to the current passphrase
-  before swapping it in. Worth doing carefully, since it's the
-  destructive restore path.
+- ~~**Restoring a backup made under an older passphrase.**~~ Fixed
+  (2026-09-26): Restore now asks for the backup's own passphrase when it
+  differs, and re-keys the restored copy to the current passphrase before
+  swapping it in (`restoreBackup.js`).
 
 - **Custom content order workflow.** Orders already carry a free-text
   status (pending/in_progress/on_hold/completed/cancelled, editable

@@ -33,6 +33,63 @@ const PROFILE_URL_TEMPLATES = [
   { names: ['bluesky', 'bsky'], url: (u) => `https://bsky.app/profile/${u}` },
 ];
 
+// The reverse direction: a pasted profile link -> platform + handle, for
+// adding a client (or an account) by pasting a link instead of typing.
+// `handle` pulls the username out of the path segments, or returns null
+// when the path isn't a profile.
+const PROFILE_HOSTS = [
+  { hosts: ['onlyfans.com'], platform: 'OnlyFans', handle: (p) => p[0] },
+  { hosts: ['fansly.com'], platform: 'Fansly', handle: (p) => p[0] },
+  { hosts: ['x.com', 'twitter.com'], platform: 'X', handle: (p) => p[0] },
+  { hosts: ['instagram.com'], platform: 'Instagram', handle: (p) => p[0] },
+  { hosts: ['reddit.com', 'old.reddit.com'], platform: 'Reddit', handle: (p) => (p[0] === 'user' || p[0] === 'u' ? p[1] : null) },
+  { hosts: ['tiktok.com'], platform: 'TikTok', handle: (p) => (p[0] && p[0].startsWith('@') ? p[0].slice(1) : null) },
+  { hosts: ['t.me', 'telegram.me'], platform: 'Telegram', handle: (p) => p[0] },
+  { hosts: ['snapchat.com'], platform: 'Snapchat', handle: (p) => (p[0] === 'add' ? p[1] : null) },
+  { hosts: ['chaturbate.com'], platform: 'Chaturbate', handle: (p) => p[0] },
+  { hosts: ['stripchat.com'], platform: 'Stripchat', handle: (p) => p[0] },
+  { hosts: ['justfor.fans'], platform: 'JustFor.Fans', handle: (p) => p[0] },
+  { hosts: ['fanvue.com'], platform: 'Fanvue', handle: (p) => p[0] },
+  { hosts: ['loyalfans.com'], platform: 'LoyalFans', handle: (p) => p[0] },
+  { hosts: ['patreon.com'], platform: 'Patreon', handle: (p) => p[0] },
+  { hosts: ['twitch.tv'], platform: 'Twitch', handle: (p) => p[0] },
+  { hosts: ['bsky.app'], platform: 'Bluesky', handle: (p) => (p[0] === 'profile' ? p[1] : null) },
+];
+
+// First path segments on those sites that are app pages, not profiles.
+const NOT_PROFILES = new Set([
+  'my', 'home', 'explore', 'settings', 'login', 'signup', 'search', 'messages', 'notifications', 'i', 'intent',
+  'share', 'p', 'reel', 'reels', 'stories', 'about', 'help', 'terms', 'privacy', 'posts', 'media', 'hashtag',
+]);
+const HANDLE_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
+
+// Returns { platformName, username, profileUrl } or null if `text` isn't a
+// profile link. profileUrl is '' for known platforms (the app rebuilds
+// those itself) and the pasted https link for any other site.
+function parseProfileLink(text) {
+  const raw = String(text || '').trim();
+  // A plain name ("Jordan M.", "jordan") is never a link: no dot, or a
+  // space (normalizeProfileUrl refuses those), or no path after the host.
+  if (!raw.includes('.')) return null;
+  const normalized = normalizeProfileUrl(raw);
+  if (!normalized) return null;
+  const url = new URL(normalized);
+  const host = url.hostname.replace(/^(www|m|mobile)\./, '').toLowerCase();
+  const segments = url.pathname.split('/').filter(Boolean).map(decodeURIComponent);
+  if (segments.length === 0) return null;
+
+  const known = PROFILE_HOSTS.find((entry) => entry.hosts.includes(host));
+  if (known) {
+    const handle = known.handle(segments);
+    if (!handle || NOT_PROFILES.has(handle.toLowerCase()) || !HANDLE_PATTERN.test(handle)) return null;
+    return { platformName: known.platform, username: handle, profileUrl: '' };
+  }
+
+  const handle = segments[segments.length - 1];
+  if (!HANDLE_PATTERN.test(handle.replace(/^@/, ''))) return null;
+  return { platformName: host, username: handle.replace(/^@/, ''), profileUrl: normalized };
+}
+
 // "Only Fans", "onlyfans.com", "OnlyFans " -> "onlyfans"
 function normalizePlatformName(name) {
   return String(name || '')
@@ -79,4 +136,4 @@ function profileUrlFor(account) {
   return template.url(encodeURIComponent(handle));
 }
 
-module.exports = { profileUrlFor, normalizeProfileUrl, isKnownPlatform, normalizePlatformName };
+module.exports = { profileUrlFor, normalizeProfileUrl, isKnownPlatform, normalizePlatformName, parseProfileLink };

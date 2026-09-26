@@ -15,6 +15,7 @@
 import {
   escapeHtml,
   formatMoney,
+  parseMoneyToCents,
   buildStatusOptions,
   loadingHtml,
   PRIORITY_OPTIONS,
@@ -25,6 +26,8 @@ import {
   followUpDateInDays,
   FOLLOW_UP_PRESETS,
   hashHue,
+  platformColor,
+  KNOWN_PLATFORM_NAMES,
   INTERACTION_TYPE_OPTIONS,
   interactionTypeLabel,
   needsPaymentDateBeforeClosing,
@@ -90,6 +93,7 @@ export function renderPersonDetailView(container, { navigate, personId }) {
     let currentTags = [];
     let allTagLabels = [];
     let latestTotals = totals;
+    let currentOrders = orders;
 
     container.innerHTML = `
       <button class="link-button" id="back" type="button">&larr; Back to ${escapeHtml(navigate.backLabel('Clients'))}</button>
@@ -104,7 +108,7 @@ export function renderPersonDetailView(container, { navigate, personId }) {
               <span id="id-flags"></span>
               <button type="button" class="icon-button" id="link-client-btn" title="Link or merge with another client">🔗</button>
             </div>
-            <div class="id-platforms" id="platform-badges"></div>
+            <div class="accounts-row" id="account-chips"></div>
           </div>
         </div>
 
@@ -129,7 +133,7 @@ export function renderPersonDetailView(container, { navigate, personId }) {
         <div class="tag-row tag-row-spaced" id="tag-row"></div>
 
         <div class="id-actions">
-          <button type="button" id="new-order">+ New order</button>
+          <div id="new-order-wrap"></div>
           <div id="follow-up-toggle-wrap"></div>
         </div>
       </div>
@@ -202,26 +206,6 @@ export function renderPersonDetailView(container, { navigate, personId }) {
             <label>Screening notes<textarea id="screening-notes" rows="3">${escapeHtml(person.screening_notes)}</textarea></label>
             <button type="submit">Save notes</button>
           </form>
-        </div>
-      </details>
-
-      <details class="detail">
-        <summary class="detail-head">
-          <h2>Platform accounts</h2>
-          <span class="detail-meta"><span id="accounts-meta"></span><span class="detail-chevron">&#9656;</span></span>
-        </summary>
-        <div class="detail-body">
-          <form id="account-form" class="inline-form">
-            <input type="text" id="platform-name" placeholder="Platform (e.g. OnlyFans)" required />
-            <input type="text" id="username" placeholder="Username / handle" required />
-            <input type="text" id="profile-url" placeholder="Profile link (optional)" hidden />
-            <label class="checkbox-label"><input type="checkbox" id="verified" /> Verified</label>
-            <button type="submit">Add account</button>
-          </form>
-          <table class="data-table">
-            <thead><tr><th>Platform</th><th>Username</th><th>Verified</th><th></th></tr></thead>
-            <tbody id="account-rows"><tr><td colspan="4" class="loading-state">Loading…</td></tr></tbody>
-          </table>
         </div>
       </details>
 
@@ -515,199 +499,285 @@ export function renderPersonDetailView(container, { navigate, personId }) {
       });
     }
 
-    // ---- Platform accounts (also feeds the id-card's platform badges) ---
+    // ---- Platform accounts: chips on the id-card ---------------------------
+    // Each account is one chip right under the client's name: click opens
+    // the profile in the browser (or copies the handle when the app can't
+    // link to that platform), hover shows x to remove, double-click edits.
+    // "+ Account" adds one in place. This replaced a separate "Platform
+    // accounts" section at the bottom of the page -- managing identities
+    // is the point of the app, so they live at the top.
 
-    container.querySelector('#account-form').addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const platformName = container.querySelector('#platform-name').value;
-      const username = container.querySelector('#username').value;
-
-      // Catch-at-entry duplicate check (see platformAccount.js's
-      // findByPlatformAndUsername()) -- the same handle already linked
-      // to a *different* client is almost always a mistake or a genuine
-      // duplicate client, so this asks before creating a second link to
-      // it rather than silently allowing it (which the merge tooling in
-      // Settings would otherwise have to catch after the fact).
-      const existingElsewhere = await window.api.platformAccount.findByPlatformAndUsername(platformName, username, {
-        excludePersonId: personId,
-      });
-      if (existingElsewhere.length > 0) {
-        const already = existingElsewhere[0];
-        const proceed = confirm(
-          `"${username}" on ${platformName} is already linked to "${already.person_label}". Add it here too anyway?`
-        );
-        if (!proceed) return;
-      }
-
-      try {
-        await window.api.platformAccount.create({
-          personId,
-          platformName,
-          username,
-          verified: container.querySelector('#verified').checked,
-          profileUrl: profileUrlInput.hidden ? '' : profileUrlInput.value,
-        });
-      } catch (err) {
-        showToast(ipcErrorMessage(err));
-        return;
-      }
-      container.querySelector('#account-form').reset();
-      profileUrlInput.hidden = true;
-      await refreshAccounts();
-    });
-
-    // The profile link field only appears for platforms the app can't link
-    // to on its own (see src/main/platformLinks.js) -- typing "OnlyFans"
-    // never shows it.
-    const profileUrlInput = container.querySelector('#profile-url');
-    let platformCheckTimer = null;
-    container.querySelector('#platform-name').addEventListener('input', (event) => {
-      clearTimeout(platformCheckTimer);
-      const name = event.target.value.trim();
-      platformCheckTimer = setTimeout(async () => {
-        profileUrlInput.hidden = !name || (await window.api.platformAccount.isKnownPlatform(name));
-      }, 250);
-    });
+    let currentAccounts = accounts;
+    const accountChipsEl = container.querySelector('#account-chips');
 
     async function refreshAccounts() {
       renderAccounts(await window.api.platformAccount.listByPerson(personId));
     }
 
-    function renderAccounts(accounts) {
-      const rows = container.querySelector('#account-rows');
-      container.querySelector('#accounts-meta').textContent = accounts.length ? `${accounts.length} linked` : '';
-
-      rows.innerHTML =
-        accounts.length === 0
-          ? '<tr><td colspan="4" class="muted">No platform accounts yet.</td></tr>'
-          : accounts
-              .map((a) => {
-                // Known platforms link automatically, so only accounts
-                // without a link (or with a custom one) get a link button.
-                const linkAction = a.profile_url ? 'Edit link' : a.has_profile_link ? '' : 'Add link';
-                return `
-              <tr>
-                <td>${escapeHtml(a.platform_name)}</td>
-                <td>${
-                  a.has_profile_link
-                    ? `<button type="button" class="link-button" data-open-profile="${a.id}">${escapeHtml(a.username)} ↗</button>`
-                    : escapeHtml(a.username)
-                }</td>
-                <td>${a.verified ? 'Yes' : 'No'}</td>
-                <td>
-                  <div class="row-actions row-actions-nowrap">
-                    ${linkAction ? `<button type="button" class="btn-secondary btn-sm" data-edit-link="${a.id}">${linkAction}</button>` : ''}
-                    <button class="danger btn-sm" data-delete-account="${a.id}">Delete</button>
-                  </div>
-                </td>
-              </tr>`;
-              })
-              .join('');
-
-      rows.querySelectorAll('[data-delete-account]').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          if (!confirm('Delete this platform account? Linked orders are kept but unlinked.')) return;
-          await window.api.platformAccount.delete(Number(btn.dataset.deleteAccount));
-          await Promise.all([refreshAccounts(), refreshMoney()]);
-        });
-      });
-
-      rows.querySelectorAll('[data-edit-link]').forEach((btn) => {
-        btn.addEventListener('click', () => toggleLinkEditor(btn, accounts.find((a) => a.id === Number(btn.dataset.editLink))));
-      });
-
-      // id-card platform badges, colored the same way the revenue chips
-      // are so "OnlyFans" reads as one color across the card. One badge
-      // per platform, unless a client has two accounts on the same one --
-      // then each gets its own, labeled with its username, so each opens
-      // the right profile. Linkable badges open the profile in the
-      // browser; deleting an account stays in the table below.
-      const perPlatform = {};
-      for (const a of accounts) perPlatform[a.platform_name.toLowerCase()] = (perPlatform[a.platform_name.toLowerCase()] || 0) + 1;
-      const seen = new Set();
-      const badges = accounts.filter((a) => {
-        const key = a.platform_name.toLowerCase();
-        if (perPlatform[key] > 1) return true;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-
-      container.querySelector('#platform-badges').innerHTML = badges.length
-        ? badges
-            .map((a) => {
-              const label = perPlatform[a.platform_name.toLowerCase()] > 1 ? `${a.platform_name} · ${a.username}` : a.platform_name;
-              const style = `style="--hue: ${hashHue(a.platform_name)}"`;
-              return a.has_profile_link
-                ? `<button type="button" class="platform-badge chip-color platform-badge-link" ${style} data-open-profile="${a.id}" title="Open ${escapeHtml(a.username)} on ${escapeHtml(a.platform_name)}">${escapeHtml(label)}<span class="badge-arrow" aria-hidden="true">↗</span></button>`
-                : `<span class="platform-badge chip-color" ${style}>${escapeHtml(label)}</span>`;
-            })
-            .join('')
-        : '<span class="muted">No platforms yet</span>';
-
-      container.querySelectorAll('[data-open-profile]').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          try {
-            await window.api.platformAccount.openProfile(Number(btn.dataset.openProfile));
-          } catch (err) {
-            showToast("Couldn't open that profile.");
-          }
-        });
-      });
+    function displayHandle(username) {
+      return /^[@/]|[\s/]/.test(username) ? username : `@${username}`;
     }
 
-    // One-line link editor under an account's row -- same open/close
-    // pattern as the Clients list's "+ Note". Saving an empty link clears it.
-    function toggleLinkEditor(btn, account) {
-      const accountRow = btn.closest('tr');
-      const openRow = container.querySelector('.link-editor-row');
-      const wasOpenHere = openRow && openRow.previousElementSibling === accountRow;
-      if (openRow) openRow.remove();
-      if (wasOpenHere) return;
+    function renderAccounts(accountList) {
+      currentAccounts = accountList;
+      accountChipsEl.innerHTML =
+        accountList
+          .map((a) => {
+            const { hue, neutral } = platformColor(a.platform_name);
+            return `
+            <span class="acct chip-color${neutral ? ' chip-neutral' : ''}" style="--hue: ${hue}" data-account-id="${a.id}">
+              <button type="button" class="acct-open" title="${a.has_profile_link ? 'Open profile' : 'Copy username'}">
+                <span class="acct-platform">${escapeHtml(a.platform_name)}</span>
+                <span class="acct-handle">${escapeHtml(displayHandle(a.username))}</span>
+                ${a.verified ? '<span class="acct-verified" title="Verified">✓</span>' : ''}
+                <span class="acct-go" aria-hidden="true">${a.has_profile_link ? '↗' : '⧉'}</span>
+              </button>
+              <button type="button" class="acct-remove" aria-label="Remove ${escapeHtml(a.platform_name)} ${escapeHtml(a.username)}">&times;</button>
+            </span>`;
+          })
+          .join('') + `<button type="button" class="chip-add" id="account-add-btn">+ Account</button>`;
 
-      const editorRow = document.createElement('tr');
-      editorRow.className = 'quick-note-row link-editor-row';
-      editorRow.innerHTML = `
-        <td colspan="4">
-          <form class="inline-form quick-note-form">
-            <input type="text" class="quick-note-text" placeholder="Profile link, e.g. https://example.com/${escapeHtml(account.username)}" value="${escapeHtml(account.profile_url || '')}" />
-            <button type="submit" class="btn-secondary">Save</button>
-            <button type="button" class="icon-button link-editor-cancel" aria-label="Cancel">&times;</button>
-          </form>
-          <p class="error" hidden></p>
-        </td>
-      `;
-      accountRow.after(editorRow);
-      const input = editorRow.querySelector('input');
-      input.focus();
-
-      const close = () => editorRow.remove();
-      editorRow.querySelector('.link-editor-cancel').addEventListener('click', close);
-      editorRow.querySelector('form').addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') close();
+      accountChipsEl.querySelectorAll('.acct').forEach((chip) => {
+        const account = accountList.find((a) => a.id === Number(chip.dataset.accountId));
+        const openBtn = chip.querySelector('.acct-open');
+        // Single click waits a beat so a double-click (edit) doesn't also
+        // open the profile.
+        let clickTimer = null;
+        openBtn.addEventListener('click', () => {
+          clearTimeout(clickTimer);
+          clickTimer = setTimeout(() => openOrCopy(account), 220);
+        });
+        openBtn.addEventListener('dblclick', () => {
+          clearTimeout(clickTimer);
+          editAccount(chip, account);
+        });
+        chip.querySelector('.acct-remove').addEventListener('click', () => removeAccount(account));
       });
-      editorRow.querySelector('form').addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const errorEl = editorRow.querySelector('.error');
+
+      accountChipsEl.querySelector('#account-add-btn').addEventListener('click', openAddAccount);
+    }
+
+    async function openOrCopy(account) {
+      if (account.has_profile_link) {
         try {
-          await window.api.platformAccount.update(account.id, { profileUrl: input.value });
-          await refreshAccounts();
-          showToast(input.value.trim() ? 'Profile link saved.' : 'Profile link removed.');
+          await window.api.platformAccount.openProfile(account.id);
         } catch (err) {
-          errorEl.textContent = ipcErrorMessage(err);
-          errorEl.hidden = false;
+          showToast("Couldn't open that profile.");
+        }
+        return;
+      }
+      try {
+        await window.api.platformAccount.copyUsername(account.id);
+        showToast(`Copied ${displayHandle(account.username)}`);
+      } catch (err) {
+        showToast("Couldn't copy the username.");
+      }
+    }
+
+    async function removeAccount(account) {
+      // Its orders stay but lose their platform, so only ask when there are some.
+      const linkedOrders = currentOrders.filter((o) => o.platform_account_id === account.id).length;
+      if (
+        linkedOrders > 0 &&
+        !confirm(`Remove ${account.platform_name} ${displayHandle(account.username)}? Its ${linkedOrders} order(s) stay, but won't be linked to a platform.`)
+      ) {
+        return;
+      }
+      await window.api.platformAccount.delete(account.id);
+      await Promise.all([refreshAccounts(), refreshMoney()]);
+      showToast(`Removed ${account.platform_name} ${displayHandle(account.username)}`);
+    }
+
+    // Inline editor in place of the chip: handle, verified, and -- only for
+    // platforms the app can't link to itself -- a profile link.
+    function editAccount(chip, account) {
+      const needsLinkField = !account.has_profile_link || !!account.profile_url;
+      const form = document.createElement('form');
+      form.className = 'acct-form';
+      form.innerHTML = `
+        <input type="text" class="acct-input" name="username" value="${escapeHtml(account.username)}" aria-label="Username" required />
+        ${
+          needsLinkField
+            ? `<input type="text" class="acct-input acct-input-wide" name="profileUrl" value="${escapeHtml(account.profile_url || '')}" placeholder="Profile link (optional)" aria-label="Profile link" />`
+            : ''
+        }
+        <label class="acct-check"><input type="checkbox" name="verified" ${account.verified ? 'checked' : ''} /> Verified</label>
+        <button type="submit" class="btn-secondary btn-sm">Save</button>
+        <button type="button" class="icon-button acct-cancel" aria-label="Cancel">&times;</button>
+      `;
+      chip.replaceWith(form);
+      form.elements.username.focus();
+      form.elements.username.select();
+
+      form.querySelector('.acct-cancel').addEventListener('click', () => renderAccounts(currentAccounts));
+      form.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') renderAccounts(currentAccounts);
+      });
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const changes = {
+          username: form.elements.username.value.trim().replace(/^@(?=[^\s/]+$)/, ''),
+          verified: form.elements.verified.checked,
+        };
+        if (needsLinkField) changes.profileUrl = form.elements.profileUrl.value;
+        try {
+          await window.api.platformAccount.update(account.id, changes);
+          await refreshAccounts();
+        } catch (err) {
+          showToast(ipcErrorMessage(err));
         }
       });
     }
 
-    // "New order" creates a blank order immediately and drops you onto
-    // its own page to fill in the rest -- like clicking "New Ticket" in a
-    // ticketing system. An empty $0 order left behind if you back out
-    // without saving anything is one click to delete from that page.
-    container.querySelector('#new-order').addEventListener('click', async () => {
-      const order = await window.api.order.create({ personId, status: 'pending', amountCents: 0 });
-      navigate('orderDetail', { orderId: order.id });
-    });
+    function openAddAccount() {
+      const addBtn = accountChipsEl.querySelector('#account-add-btn');
+      const form = document.createElement('form');
+      form.className = 'acct-form';
+      form.innerHTML = `
+        <input type="text" class="acct-input" name="platformName" placeholder="Platform or link" list="account-platform-options" aria-label="Platform" required />
+        <input type="text" class="acct-input" name="username" placeholder="Username" aria-label="Username" required />
+        <input type="text" class="acct-input acct-input-wide" name="profileUrl" placeholder="Profile link (optional)" aria-label="Profile link" hidden />
+        <button type="submit" class="btn-secondary btn-sm">Add</button>
+        <button type="button" class="icon-button acct-cancel" aria-label="Cancel">&times;</button>
+        <datalist id="account-platform-options">
+          ${KNOWN_PLATFORM_NAMES.map((p) => `<option value="${p}"></option>`).join('')}
+        </datalist>
+      `;
+      addBtn.replaceWith(form);
+      form.elements.platformName.focus();
+
+      form.querySelector('.acct-cancel').addEventListener('click', () => renderAccounts(currentAccounts));
+      form.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') renderAccounts(currentAccounts);
+      });
+
+      // The link field only appears for platforms the app can't link to
+      // on its own (see src/main/platformLinks.js).
+      // Pasting a profile link into Platform fills in everything at once.
+      let platformCheckTimer = null;
+      form.elements.platformName.addEventListener('input', () => {
+        clearTimeout(platformCheckTimer);
+        const name = form.elements.platformName.value.trim();
+        platformCheckTimer = setTimeout(async () => {
+          const fromLink = name.includes('/') ? await window.api.platformAccount.parseProfileLink(name) : null;
+          if (fromLink) {
+            form.elements.platformName.value = fromLink.platformName;
+            form.elements.username.value = fromLink.username;
+            form.elements.profileUrl.value = fromLink.profileUrl;
+            form.elements.profileUrl.hidden = !fromLink.profileUrl;
+            form.elements.username.focus();
+            return;
+          }
+          form.elements.profileUrl.hidden = !name || (await window.api.platformAccount.isKnownPlatform(name));
+        }, 250);
+      });
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const platformName = form.elements.platformName.value.trim();
+        const username = form.elements.username.value.trim().replace(/^@(?=[^\s/]+$)/, '');
+
+        // The same handle already linked to a *different* client is almost
+        // always a mistake or a duplicate client (see personDuplicates.js),
+        // so ask before linking it twice.
+        const existingElsewhere = await window.api.platformAccount.findByPlatformAndUsername(platformName, username, {
+          excludePersonId: personId,
+        });
+        if (
+          existingElsewhere.length > 0 &&
+          !confirm(`"${username}" on ${platformName} is already linked to "${existingElsewhere[0].person_label}". Add it here too anyway?`)
+        ) {
+          return;
+        }
+
+        try {
+          await window.api.platformAccount.create({
+            personId,
+            platformName,
+            username,
+            profileUrl: form.elements.profileUrl.hidden ? '' : form.elements.profileUrl.value,
+          });
+          await refreshAccounts();
+        } catch (err) {
+          showToast(ipcErrorMessage(err));
+        }
+      });
+    }
+
+    // ---- Quick order ---------------------------------------------------
+    // "+ New order" opens a one-line form right on the card (amount,
+    // platform, what for, paid today) -- logging a sale takes seconds and
+    // never leaves the page. "Full order..." still creates a blank order
+    // and opens its own page, for due dates, attachments and the rest.
+    const newOrderWrap = container.querySelector('#new-order-wrap');
+
+    function collapseQuickOrder() {
+      newOrderWrap.innerHTML = `<button type="button" id="new-order">+ New order</button>`;
+      newOrderWrap.querySelector('#new-order').addEventListener('click', expandQuickOrder);
+    }
+
+    // The account their most recent order used, if it still exists --
+    // usually where the next one comes from too.
+    function likelyAccountId() {
+      const recent = [...currentOrders]
+        .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+        .find((o) => currentAccounts.some((a) => a.id === o.platform_account_id));
+      if (recent) return recent.platform_account_id;
+      return currentAccounts.length ? currentAccounts[0].id : '';
+    }
+
+    function expandQuickOrder() {
+      const defaultAccount = likelyAccountId();
+      newOrderWrap.innerHTML = `
+        <form id="quick-order-form" class="inline-form quick-order-form">
+          <input type="number" id="qo-amount" min="0" step="0.01" placeholder="Amount" required />
+          <select id="qo-account" aria-label="Platform">
+            ${currentAccounts
+              .map(
+                (a) =>
+                  `<option value="${a.id}"${a.id === defaultAccount ? ' selected' : ''}>${escapeHtml(a.platform_name)} ${escapeHtml(displayHandle(a.username))}</option>`
+              )
+              .join('')}
+            <option value=""${defaultAccount === '' ? ' selected' : ''}>No platform</option>
+          </select>
+          <input type="text" id="qo-description" placeholder="What for (optional)" />
+          <label class="acct-check"><input type="checkbox" id="qo-paid" checked /> Paid today</label>
+          <button type="submit">Add</button>
+          <button type="button" class="link-button" id="qo-full">Full order…</button>
+          <button type="button" class="icon-button" id="qo-cancel" aria-label="Cancel">&times;</button>
+        </form>
+      `;
+      const form = newOrderWrap.querySelector('#quick-order-form');
+      form.querySelector('#qo-amount').focus();
+
+      form.querySelector('#qo-cancel').addEventListener('click', collapseQuickOrder);
+      form.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') collapseQuickOrder();
+      });
+      form.querySelector('#qo-full').addEventListener('click', async () => {
+        const order = await window.api.order.create({ personId, status: 'pending', amountCents: 0 });
+        navigate('orderDetail', { orderId: order.id });
+      });
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const paid = form.querySelector('#qo-paid').checked;
+        const accountValue = form.querySelector('#qo-account').value;
+        const order = await window.api.order.create({
+          personId,
+          platformAccountId: accountValue ? Number(accountValue) : null,
+          amountCents: parseMoneyToCents(form.querySelector('#qo-amount').value),
+          description: form.querySelector('#qo-description').value.trim(),
+          status: paid ? 'completed' : 'pending',
+          datePaid: paid ? followUpDateInDays(0) : null,
+        });
+        collapseQuickOrder();
+        await refreshMoney();
+        showToast(`Order #${order.id} added${paid ? ' as paid' : ''}.`);
+      });
+    }
+
+    collapseQuickOrder();
 
     // Exports this client + every one of their orders (attachments
     // included) to a passphrase-encrypted file -- see settings.js's
@@ -787,10 +857,10 @@ export function renderPersonDetailView(container, { navigate, personId }) {
       const listEl = container.querySelector('#revenue-chips');
       listEl.innerHTML = rows.length
         ? rows
-            .map(
-              (r) =>
-                `<div class="prev-chip chip-color" style="--hue: ${hashHue(r.platform_name)}">${escapeHtml(r.platform_name)} <span class="amt">${formatMoney(r.total_cents)}</span></div>`
-            )
+            .map((r) => {
+              const { hue, neutral } = platformColor(r.platform_name);
+              return `<div class="prev-chip chip-color${neutral ? ' chip-neutral' : ''}" style="--hue: ${hue}">${escapeHtml(r.platform_name)} <span class="amt">${formatMoney(r.total_cents)}</span></div>`;
+            })
             .join('')
         : '<span class="muted">No paid orders this year</span>';
     }
@@ -949,6 +1019,7 @@ export function renderPersonDetailView(container, { navigate, personId }) {
     }
 
     function renderOrders(orders) {
+      currentOrders = orders;
       // "Placed" order, newest first -- date_paid is NULL for anything
       // not yet paid, which would otherwise bury pending orders.
       orders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());

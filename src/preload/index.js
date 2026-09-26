@@ -44,17 +44,21 @@ contextBridge.exposeInMainWorld('api', {
     update: (id, data) => ipcRenderer.invoke('person:update', id, data),
     delete: (id) => ipcRenderer.invoke('person:delete', id),
     mergeInto: (loserId, survivorId) => ipcRenderer.invoke('person:mergeInto', loserId, survivorId),
+    addFromProfileLink: (text) => ipcRenderer.invoke('person:addFromProfileLink', text),
     findDuplicateCandidates: () => ipcRenderer.invoke('person:findDuplicateCandidates'),
   },
   platformAccount: {
     listByPerson: (personId) => ipcRenderer.invoke('platformAccount:listByPerson', personId),
+    listGroupedByPerson: () => ipcRenderer.invoke('platformAccount:listGroupedByPerson'),
     create: (data) => ipcRenderer.invoke('platformAccount:create', data),
     update: (id, data) => ipcRenderer.invoke('platformAccount:update', id, data),
     delete: (id) => ipcRenderer.invoke('platformAccount:delete', id),
     findByPlatformAndUsername: (platformName, username, options) =>
       ipcRenderer.invoke('platformAccount:findByPlatformAndUsername', platformName, username, options),
     isKnownPlatform: (platformName) => ipcRenderer.invoke('platformAccount:isKnownPlatform', platformName),
+    parseProfileLink: (text) => ipcRenderer.invoke('platformAccount:parseProfileLink', text),
     openProfile: (accountId) => ipcRenderer.invoke('platformAccount:openProfile', accountId),
+    copyUsername: (accountId) => ipcRenderer.invoke('platformAccount:copyUsername', accountId),
   },
   tag: {
     listAll: () => ipcRenderer.invoke('tag:listAll'),
@@ -224,7 +228,7 @@ contextBridge.exposeInMainWorld('api', {
     // separate export format -- see src/main/backup/restoreBackup.js.
     create: () => ipcRenderer.invoke('backup:create'),
     pickFile: () => ipcRenderer.invoke('backup:pickFile'),
-    restore: (filePath, passphrase) => ipcRenderer.invoke('backup:restore', { filePath, passphrase }),
+    restore: (filePath, passphrase, backupPassphrase) => ipcRenderer.invoke('backup:restore', { filePath, passphrase, backupPassphrase }),
     getStatus: () => ipcRenderer.invoke('backup:getStatus'),
     pickAutoFolder: () => ipcRenderer.invoke('backup:pickAutoFolder'),
     setAutoEnabled: (enabled) => ipcRenderer.invoke('backup:setAutoEnabled', enabled),

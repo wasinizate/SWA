@@ -93,7 +93,9 @@ function registerBackupIpc() {
     return filePaths[0];
   });
 
-  ipcMain.handle('backup:restore', (_event, { filePath, passphrase }) => restoreFromBackup(filePath, passphrase));
+  ipcMain.handle('backup:restore', (_event, { filePath, passphrase, backupPassphrase }) =>
+    restoreFromBackup(filePath, passphrase, backupPassphrase || passphrase)
+  );
 }
 
 module.exports = { registerBackupIpc };

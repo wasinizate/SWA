@@ -10,6 +10,7 @@
 // wiring it up to a UI that can call it by mistake.
 
 const fs = require('fs');
+const Database = require('better-sqlite3-multiple-ciphers');
 const connection = require('../db/connection');
 const { runMigrations } = require('../db/migrate');
 
@@ -18,28 +19,66 @@ const { runMigrations } = require('../db/migrate');
 // (`<dbPath>.pre-restore-<timestamp>.bak`) so a mistaken or regretted
 // restore is itself recoverable -- the path is returned so the caller
 // can tell the user exactly where it went.
-async function restoreFromBackup(backupFilePath, passphrase) {
+//
+// `passphrase` is the vault's *current* one. A backup made before a
+// passphrase change opens only with the passphrase in use back then, so
+// `backupPassphrase` can differ: the restored copy is then re-encrypted
+// (PRAGMA rekey) to the current passphrase before it replaces the vault,
+// so the vault's passphrase -- and the quick-unlock/recovery-phrase
+// wrappers built on it -- never change underneath the user.
+const OLDER_PASSPHRASE_MESSAGE = 'This backup was made with a different passphrase.';
+
+async function restoreFromBackup(backupFilePath, passphrase, backupPassphrase = passphrase) {
   if (!fs.existsSync(backupFilePath)) {
     throw new Error('Backup file not found.');
   }
 
   const dbPath = connection.getDbPath();
 
-  // Two checks before anything destructive happens: the chosen file has
-  // to actually be a valid encrypted database openable with this
-  // passphrase, and that passphrase has to be *this* vault's real one --
-  // catches "right file, wrong vault" (or a mistyped passphrase) with a
-  // clean error and zero side effects, rather than relying on the
-  // safety copy below to undo it.
-  connection.verifyPassphraseAgainstFile(backupFilePath, passphrase);
-  connection.verifyPassphraseAgainstFile(dbPath, passphrase);
+  // Checks before anything destructive happens, each failing with a
+  // clean error and zero side effects: the passphrase has to be *this*
+  // vault's real one, and the chosen file has to open with the backup's
+  // passphrase.
+  try {
+    connection.verifyPassphraseAgainstFile(dbPath, passphrase);
+  } catch {
+    throw new Error("That isn't your current passphrase.");
+  }
+  try {
+    connection.verifyPassphraseAgainstFile(backupFilePath, backupPassphrase);
+  } catch {
+    // Same passphrase for both means the renderer hasn't asked for the
+    // backup's own one yet -- say so, so it can.
+    throw new Error(backupPassphrase === passphrase ? OLDER_PASSPHRASE_MESSAGE : 'That passphrase doesn\'t open this backup either.');
+  }
+
+  // Re-key a scratch copy first, so the chosen backup file itself is never
+  // modified and a failure here leaves the live vault untouched.
+  const incomingPath = `${dbPath}.restore-${Date.now()}.tmp`;
+  fs.copyFileSync(backupFilePath, incomingPath);
+  try {
+    if (backupPassphrase !== passphrase) {
+      const incoming = new Database(incomingPath, { fileMustExist: true });
+      try {
+        incoming.pragma(`key='${connection.escapeForPragma(backupPassphrase)}'`);
+        incoming.pragma(`rekey='${connection.escapeForPragma(passphrase)}'`);
+      } finally {
+        incoming.close();
+      }
+      connection.verifyPassphraseAgainstFile(incomingPath, passphrase);
+    }
+  } catch (err) {
+    fs.rmSync(incomingPath, { force: true });
+    throw err;
+  }
 
   connection.close();
 
   const safetyCopyPath = `${dbPath}.pre-restore-${Date.now()}.bak`;
   fs.copyFileSync(dbPath, safetyCopyPath);
 
-  fs.copyFileSync(backupFilePath, dbPath);
+  fs.copyFileSync(incomingPath, dbPath);
+  fs.rmSync(incomingPath, { force: true });
 
   // Passphrase already proven valid above, so this can't fail on that
   // account. runMigrations() brings an older backup's schema forward --
@@ -50,4 +89,4 @@ async function restoreFromBackup(backupFilePath, passphrase) {
   return { safetyCopyPath };
 }
 
-module.exports = { restoreFromBackup };
+module.exports = { restoreFromBackup, OLDER_PASSPHRASE_MESSAGE };

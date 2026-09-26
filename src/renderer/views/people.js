@@ -35,8 +35,8 @@ export function renderPeopleView(container, { navigate, quietOnly, focusAddForm,
         : ''
     }
     <form id="create-form" class="inline-form">
-      <input type="text" id="private-label" placeholder="Private label (a nickname you'll recognize)" required />
-      <button type="submit">Add client</button>
+      <input type="text" id="private-label" placeholder="Nickname, or paste a profile link" required />
+      <button type="submit" id="add-client-btn">Add client</button>
     </form>
     <p class="error" id="error" hidden></p>
 
@@ -79,6 +79,7 @@ export function renderPeopleView(container, { navigate, quietOnly, focusAddForm,
 
   let allPeople = [];
   let tagsByPerson = {};
+  let accountsByPerson = {};
   let lastOrderByPerson = {};
   let lifetimeSpendByPerson = {};
   let quietThresholdDays = 30;
@@ -135,19 +136,21 @@ export function renderPeopleView(container, { navigate, quietOnly, focusAddForm,
   let sortDirection = SORT_COLUMNS.label.defaultDirection;
 
   async function refresh() {
-    const [people, groupedTags, allTags, lastOrderMap, lifetimeSpendMap, thresholdDays] = await Promise.all([
+    const [people, groupedTags, allTags, lastOrderMap, lifetimeSpendMap, thresholdDays, groupedAccounts] = await Promise.all([
       window.api.person.listAll(),
       window.api.tag.listGroupedByPerson(),
       window.api.tag.listAll(),
       window.api.order.listLastOrderDateByPerson(),
       window.api.order.listLifetimeSpendByPerson(),
       window.api.settings.getQuietClientThresholdDays(),
+      window.api.platformAccount.listGroupedByPerson(),
     ]);
     // Excluded from the list entirely while linking -- picking yourself
     // as the "other" client makes no sense, and person.js's own
     // create()/mergeInto() guards would just reject it anyway.
     allPeople = linkingWithPersonId ? people.filter((p) => p.id !== linkingWithPersonId) : people;
     tagsByPerson = groupedTags;
+    accountsByPerson = groupedAccounts;
     lastOrderByPerson = lastOrderMap;
     lifetimeSpendByPerson = lifetimeSpendMap;
     quietThresholdDays = thresholdDays ?? 30;
@@ -174,6 +177,20 @@ export function renderPeopleView(container, { navigate, quietOnly, focusAddForm,
     // falls back to "All" -- e.g. after removing the last client tagged
     // with whatever's currently filtered on.
     if (clientTags.some((t) => String(t.id) === previousValue)) filterSelect.value = previousValue;
+  }
+
+  // Each client's handles under their name, so an identity can be spotted
+  // without opening anyone. The platform is in the tooltip.
+  function handlesHtml(personId) {
+    const accounts = accountsByPerson[personId] || [];
+    if (accounts.length === 0) return '';
+    const handles = accounts
+      .map((a) => {
+        const handle = /^[@/]|[\s/]/.test(a.username) ? a.username : `@${a.username}`;
+        return `<span title="${escapeHtml(a.platformName)}">${escapeHtml(handle)}</span>`;
+      })
+      .join(' · ');
+    return `<div class="client-handles">${handles}</div>`;
   }
 
   // A client with no orders at all was never really "heard from" to
@@ -254,7 +271,10 @@ export function renderPeopleView(container, { navigate, quietOnly, focusAddForm,
         const quiet = days !== null && days >= quietThresholdDays;
         return `
         <tr>
-          <td><button class="link-button" data-open="${p.id}">${escapeHtml(p.private_label)}</button></td>
+          <td>
+            <button class="link-button" data-open="${p.id}">${escapeHtml(p.private_label)}</button>
+            ${handlesHtml(p.id)}
+          </td>
           <td>${priorityBadgeHtml(p.priority)}</td>
           <td>${
             tags.length
@@ -387,13 +407,35 @@ export function renderPeopleView(container, { navigate, quietOnly, focusAddForm,
     });
   });
 
+  // A pasted profile link (onlyfans.com/jordan_m) adds the client *and*
+  // that account in one go -- see personIpc.js's addFromProfileLink().
+  // Anything else is a plain nickname, same as always.
+  const addInput = container.querySelector('#private-label');
+  const addBtn = container.querySelector('#add-client-btn');
+  const looksLikeLink = (value) => /^\S+\.\S+\/\S+$/.test(value.trim()) || /^https?:\/\//i.test(value.trim());
+  addInput.addEventListener('input', () => {
+    addBtn.textContent = looksLikeLink(addInput.value) ? 'Add from link' : 'Add client';
+  });
+
   container.querySelector('#create-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     errorEl.hidden = true;
-    const input = container.querySelector('#private-label');
     try {
-      await window.api.person.create({ privateLabel: input.value });
-      input.value = '';
+      if (looksLikeLink(addInput.value)) {
+        const result = await window.api.person.addFromProfileLink(addInput.value);
+        const handle = `${result.platformName} @${result.username}`;
+        if (result.existing) {
+          // Already have them: go there instead of making a duplicate.
+          showToast(`${handle} is already ${result.label}.`);
+          navigate('personDetail', { personId: result.personId });
+          return;
+        }
+        showToast(`Added ${result.label} (${handle}).`);
+      } else {
+        await window.api.person.create({ privateLabel: addInput.value });
+      }
+      addInput.value = '';
+      addBtn.textContent = 'Add client';
       refresh();
     } catch (err) {
       errorEl.textContent = ipcErrorMessage(err);

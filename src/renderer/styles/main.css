@@ -1047,51 +1047,141 @@ hr {
   flex-wrap: wrap;
 }
 
-.id-platforms {
+/* Platform accounts on the client card (personDetail.js): one chip per
+   account -- platform, handle, a check if verified, and an arrow when it
+   opens a profile (a copy mark when it copies the handle instead). */
+.accounts-row {
   margin-top: 0.4rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  align-items: center;
+  gap: 0.4rem;
 }
 
-/* Shared by platform badges, revenue chips, and preference tags -- a
+/* Shared by account chips, revenue chips, and preference tags -- a
    chip's --hue custom property is set inline by JS (see helpers.js's
-   hashHue()), so the same platform name lands on the same color
+   platformColor() and hashHue()), so the same platform lands on the same color
    everywhere it appears on the card, and every tag reads as its own
    distinct color instead of one uniform muted pill. Saturation/lightness
    stay theme tokens, not hardcoded, so a hash-colored chip stays legible
-   across all 4 themes the same way every other color in this file does. */
+   across all 5 themes the same way every other color in this file does. */
 .chip-color {
   background: hsl(var(--hue) var(--chip-bg-sat) var(--chip-bg-light));
   color: hsl(var(--hue) var(--chip-fg-sat) var(--chip-fg-light));
   border: 1px solid hsl(var(--hue) var(--chip-border-sat) var(--chip-border-light));
 }
 
-.platform-badge {
+
+/* X and anything else deliberately without a color. */
+.chip-neutral {
+  --chip-bg-sat: 0%;
+  --chip-fg-sat: 0%;
+  --chip-border-sat: 0%;
+}
+
+.acct {
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  overflow: hidden;
+}
+
+.acct-open {
+  all: unset;
   display: inline-flex;
   align-items: center;
-  border-radius: 999px;
-  padding: 0.16rem 0.55rem;
-  font-size: 0.76rem;
-  font-weight: 600;
+  gap: 0.4rem;
+  padding: 0.28rem 0.55rem;
+  cursor: pointer;
 }
 
-/* A platform badge that opens the account's profile in the browser
-   (personDetail.js). The small arrow says "opens elsewhere" without any
-   helper text. */
-.platform-badge-link {
-  gap: 0.25rem;
+.acct-open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 8px;
 }
 
-.badge-arrow {
-  font-size: 0.7rem;
-  opacity: 0.6;
+.acct-platform {
+  font-weight: 700;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.85;
+}
+
+.acct-handle {
+  font-family: Consolas, 'SFMono-Regular', Menlo, monospace;
+  font-size: 0.8rem;
+}
+
+.acct-verified {
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.acct-go {
+  font-size: 0.72rem;
+  opacity: 0.55;
   transition: opacity 0.1s ease;
 }
 
-.platform-badge-link:hover .badge-arrow,
-.platform-badge-link:focus-visible .badge-arrow {
+.acct-open:hover .acct-go,
+.acct-open:focus-visible .acct-go {
   opacity: 1;
+}
+
+.acct-remove {
+  all: unset;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0 0.45rem;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+
+.acct:hover .acct-remove,
+.acct-remove:focus-visible {
+  opacity: 0.75;
+}
+
+.acct-remove:hover {
+  opacity: 1;
+}
+
+/* Add/edit form that takes a chip's place, on one line. */
+.acct-form {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.acct-form .acct-input {
+  display: inline-block;
+  width: 9rem;
+  margin: 0;
+  padding: 0.28rem 0.5rem;
+  font-size: 0.82rem;
+}
+
+.acct-form .acct-input-wide {
+  width: 14rem;
+}
+
+.acct-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.acct-check input {
+  width: auto;
+  margin: 0;
 }
 
 /* Priority badge (VIP etc.) reuses .priority-badge as-is; this is just
@@ -1293,6 +1383,57 @@ hr {
 
 #quick-follow-up-note {
   width: 11rem;
+}
+
+/* Client card's quick "+ New order" form (personDetail.js). */
+#new-order-wrap:has(form) {
+  flex: 1 1 100%;
+}
+
+.quick-order-form {
+  margin: 0;
+  align-items: center;
+}
+
+/* Explicit width too: a number input's built-in minimum ignores flex-basis. */
+.quick-order-form #qo-amount {
+  flex: 0 0 6rem;
+  width: 6rem;
+  min-width: 0;
+}
+
+.quick-order-form select {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.quick-order-form #qo-description {
+  flex: 1 1 7rem;
+  min-width: 0;
+}
+
+/* .inline-form stretches every input -- not the checkbox or its label. */
+.quick-order-form .acct-check {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.quick-order-form .acct-check input {
+  flex: 0 0 auto;
+  width: auto;
+}
+
+.quick-order-form button {
+  flex: 0 0 auto;
+}
+
+/* Clients list: a client's handles under their name (people.js). */
+.client-handles {
+  font-family: Consolas, 'SFMono-Regular', Menlo, monospace;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+  overflow-wrap: anywhere;
 }
 
 .row-actions-nowrap {
@@ -2213,11 +2354,16 @@ hr {
 }
 
 /* Tags, platforms and revenue chips as type badges. */
-:root[data-theme="pokedex"] .platform-badge,
+:root[data-theme="pokedex"] .acct-platform,
 :root[data-theme="pokedex"] .pref-chip.chip-color,
 :root[data-theme="pokedex"] .prev-chip {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-weight: 700;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
+}
+
+/* Handles keep their real case, but get the same shadow for white text. */
+:root[data-theme="pokedex"] .acct {
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
 }

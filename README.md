@@ -29,8 +29,11 @@ A "/" command palette in the search bar (Ctrl+K/Cmd+K from anywhere) --
 /reminder, /add-event, and a jump-to shortcut for every page
 A sortable, recently-viewed-aware Clients list, so "who deserves my
 attention right now" is a glance, not a re-search
-One-click profile links: click a platform badge on a client's card to
-open their profile in your own browser
+Every client's accounts right on their card: click one to open that
+profile in your own browser, or paste a profile link to add a client
+(and their account) in one step
+Log a sale in seconds right from the client's card, without opening a
+separate order page
 Automatic daily encrypted backups to a folder you choose, with a
 Dashboard reminder when it's been a while
 Five color themes, including a Pokédex one

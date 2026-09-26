@@ -39,6 +39,67 @@ export function ipcErrorMessage(err) {
   return message.replace(/^Error invoking remote method '[^']*': (?:[A-Za-z]*Error: )?/, '');
 }
 
+// Fixed hues for well-known platforms, spread around the color wheel so
+// the common ones never look alike (hashing "OnlyFans" and "Fansly" put
+// both on green). X is deliberately neutral, like its own branding.
+// Anything else falls back to a hash of the name, ignoring case and
+// punctuation so "OnlyFans" and "only fans" always match.
+const PLATFORM_HUES = {
+  onlyfans: 199,
+  fansly: 262,
+  reddit: 18,
+  instagram: 322,
+  telegram: 168,
+  tiktok: 350,
+  snapchat: 52,
+  chaturbate: 32,
+  manyvids: 292,
+  stripchat: 140,
+  justforfans: 225,
+  fanvue: 110,
+  loyalfans: 240,
+  patreon: 8,
+  twitch: 275,
+  bluesky: 210,
+};
+const NEUTRAL_PLATFORMS = new Set(['x', 'twitter', 'twitterx', 'xtwitter']);
+
+// Suggestions for the "Platform" field when adding an account.
+export const KNOWN_PLATFORM_NAMES = [
+  'OnlyFans',
+  'Fansly',
+  'X',
+  'Instagram',
+  'Reddit',
+  'TikTok',
+  'Telegram',
+  'Snapchat',
+  'Chaturbate',
+  'Stripchat',
+  'ManyVids',
+  'JustFor.Fans',
+  'Fanvue',
+  'LoyalFans',
+  'Patreon',
+  'Twitch',
+  'Bluesky',
+];
+
+function platformKey(name) {
+  return String(name || '')
+    .toLowerCase()
+    .replace(/\.(com|net|tv|me|app|fans)$/, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+// { hue, neutral } for a platform chip: set --hue from `hue`, and add the
+// chip-neutral class when `neutral` is true.
+export function platformColor(name) {
+  const key = platformKey(name);
+  if (NEUTRAL_PLATFORMS.has(key)) return { hue: 0, neutral: true };
+  return { hue: PLATFORM_HUES[key] ?? hashHue(key), neutral: false };
+}
+
 export function formatDateTime(isoString) {
   if (!isoString) return '';
   // toLocaleString() with no options includes seconds in most locales --

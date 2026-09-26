@@ -1017,8 +1017,23 @@ export function renderSettingsView(container, { navigate } = {}) {
     if (!passphrase) return;
 
     try {
-      const { safetyCopyPath } = await window.api.backup.restore(filePath, passphrase);
-      showToast(`Restored. Your previous data was saved to: ${safetyCopyPath}`);
+      let result;
+      try {
+        result = await window.api.backup.restore(filePath, passphrase);
+      } catch (err) {
+        // A backup from before a passphrase change: ask for the one it was
+        // made with. The restored data keeps your current passphrase.
+        if (!ipcErrorMessage(err).startsWith('This backup was made with a different passphrase')) throw err;
+        const backupPassphrase = await promptForPassphrase({
+          title: 'Older backup',
+          confirmLabel: 'Restore (replaces everything)',
+          helpText:
+            'This backup was made before your passphrase changed. Enter the passphrase you used back then. Your current passphrase stays the same after restoring.',
+        });
+        if (!backupPassphrase) return;
+        result = await window.api.backup.restore(filePath, passphrase, backupPassphrase);
+      }
+      showToast(`Restored. Your previous data was saved to: ${result.safetyCopyPath}`);
       location.reload();
     } catch (err) {
       resultEl.className = 'error';

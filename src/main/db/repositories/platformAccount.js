@@ -82,4 +82,19 @@ function remove(id) {
   getDb().prepare('DELETE FROM platform_accounts WHERE id = ?').run(id);
 }
 
-module.exports = { listByPerson, get, create, update, remove, findByPlatformAndUsername };
+// Every client's accounts in one query, grouped in JS (same shape as
+// tag.js's listGroupedByPerson()) -- the Clients list shows each client's
+// handles under their name.
+function listGroupedByPerson() {
+  const rows = getDb()
+    .prepare('SELECT person_id, platform_name, username FROM platform_accounts ORDER BY platform_name COLLATE NOCASE, username COLLATE NOCASE')
+    .all();
+  const grouped = {};
+  for (const row of rows) {
+    if (!grouped[row.person_id]) grouped[row.person_id] = [];
+    grouped[row.person_id].push({ platformName: row.platform_name, username: row.username });
+  }
+  return grouped;
+}
+
+module.exports = { listByPerson, listGroupedByPerson, get, create, update, remove, findByPlatformAndUsername };

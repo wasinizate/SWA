@@ -1,8 +1,8 @@
 'use strict';
 
-const { ipcMain, shell } = require('electron');
+const { ipcMain, shell, clipboard } = require('electron');
 const platformAccountRepo = require('../db/repositories/platformAccount');
-const { profileUrlFor, isKnownPlatform } = require('../platformLinks');
+const { profileUrlFor, isKnownPlatform, parseProfileLink } = require('../platformLinks');
 
 // has_profile_link tells the renderer which badges to make clickable,
 // without the renderer ever handling the URL itself.
@@ -14,6 +14,7 @@ function registerPlatformAccountIpc() {
   ipcMain.handle('platformAccount:listByPerson', (_event, personId) =>
     platformAccountRepo.listByPerson(personId).map(withProfileLinkFlag)
   );
+  ipcMain.handle('platformAccount:listGroupedByPerson', () => platformAccountRepo.listGroupedByPerson());
   ipcMain.handle('platformAccount:create', (_event, data) => platformAccountRepo.create(data));
   ipcMain.handle('platformAccount:update', (_event, id, data) => platformAccountRepo.update(id, data));
   ipcMain.handle('platformAccount:delete', (_event, id) => platformAccountRepo.remove(id));
@@ -21,6 +22,17 @@ function registerPlatformAccountIpc() {
     platformAccountRepo.findByPlatformAndUsername(platformName, username, options)
   );
   ipcMain.handle('platformAccount:isKnownPlatform', (_event, platformName) => isKnownPlatform(platformName));
+  ipcMain.handle('platformAccount:parseProfileLink', (_event, text) => parseProfileLink(text));
+
+  // For platforms with no profile link, clicking the chip copies the handle.
+  // Done here (Electron's clipboard) rather than navigator.clipboard, which
+  // refuses when the window isn't focused.
+  ipcMain.handle('platformAccount:copyUsername', (_event, accountId) => {
+    const account = platformAccountRepo.get(accountId);
+    if (!account) throw new Error('Account not found.');
+    clipboard.writeText(account.username);
+    return account.username;
+  });
 
   // Takes an account id, not a URL: the link is always rebuilt here from
   // the stored account (see platformLinks.js), so nothing the renderer

@@ -135,12 +135,15 @@ or more plugins, update the `FILES_TO_COPY` list in that script, the
 
 `electron-builder.yml` bundles `node_modules/**/*` minus a few exclusions:
 the `fullcalendar` package (its runtime files are already vendored),
-SQLite's C source, and every prebuilt `better-sqlite3-multiple-ciphers`
-binary except the one for the target OS/CPU (each platform section of the
-yml drops the rest). `*.node` files are unpacked out of the asar archive,
-since native modules can't load from inside one. Two traps, both hit and
-documented in the yml: node_modules patterns must be exclusions (include
-patterns are silently ignored there), and the `${platform}` macro is the
+SQLite's C source. `*.node` files are unpacked out of the asar archive,
+since native modules can't load from inside one, and then the `afterPack`
+hook (`scripts/prune-native-prebuilds.js`) deletes every prebuilt
+`better-sqlite3-multiple-ciphers` binary except the target OS/CPU's --
+it's told the real target, and refuses to finish if that binary is
+missing. Traps hit while building this, all documented in the yml and
+that script: a `files` list under win/mac/linux *replaces* the top-level
+one (and silently packages the whole project folder), node_modules
+patterns only honor exclusions, and the `${platform}` macro is the
 *build* machine's OS, not the target's. Chromium's `locales/*.pak` files
 are deliberately kept: removing a language's file makes Chromium fall back
 to en-US, which silently switches that user's date/number formatting to US
